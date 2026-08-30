@@ -202,6 +202,16 @@ Interpret the result before changing or installing anything:
 - `401` — the package exists but is private; fix package visibility;
 - `404` — the image or tag is genuinely absent; fix the build, name, or tag.
 
+**Visibility-API sub-case — symptom:** The package visibility API returns `404
+Not Found` for a package that is visible in GitHub's web UI. On these management
+endpoints, that `404` does **not** prove the package is absent.
+
+**Cause and fix:** A token without `read:packages`/`write:packages` can receive
+`404` on some package endpoints and `403` on others. Check `gh auth status -h
+github.com` for package scopes before diagnosing the artifact, then run `gh auth
+refresh -h github.com -s write:packages,read:packages`; refreshing authorization
+requires a real TTY and must not be scripted.
+
 Repeat the anonymous probe for `amd64-addon-hello`. Only after both architectures
 return `200` should `config.yaml` point at the image. Pointing an installed
 add-on at a tag that cannot be pulled breaks the **installed add-on**, not merely
