@@ -1,0 +1,50 @@
+name: "Hello"
+version: "0.1.0"
+slug: "hello"
+description: >-
+  A minimal Home Assistant add-on that serves a configurable greeting and a
+  machine-readable health endpoint.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/01-hello"
+
+# A published image makes installation a pull instead of forcing a small HAOS
+# machine to download Bun and build locally. It also moves build failures into
+# CI; Supervisor can otherwise report a requested update as successful while
+# quietly leaving the previous image running.
+image: "ghcr.io/soul-brews-studio/{arch}-addon-hello"
+arch:
+  - amd64
+  - aarch64
+startup: application
+# A reboot must restore the service without a human reopening the add-on page.
+boot: auto
+# Home Assistant base images already use s6-overlay as PID 1; a second init
+# layer fights the lifecycle and signal handling that Supervisor expects.
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# Ingress gives the browser a Home Assistant-authenticated sidebar route, but
+# API clients have no HA browser session and need a stable LAN address too.
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:hand-wave
+panel_title: Hello
+panel_admin: false
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: "Greeting page and health API"
+
+# Supervisor persists and backs up /data across updates; every other writable
+# container path is disposable even though this tiny example stores no data yet.
+map:
+  - data:rw
+stage: experimental
+
+options:
+  greeting: "hello"
+schema:
+  # `url?` with an empty default fails Supervisor validation before a container
+  # exists, leaving the add-on log empty. Plain strings use `str` here.
+  greeting: str
