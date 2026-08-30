@@ -172,3 +172,40 @@ When this fails, inspect evidence in layers instead of guessing:
 
 A value present at step 1 and absent at steps 2–3 isolates the entrypoint bridge.
 Do not rewrite the schema or application parser until `run.sh` has been checked.
+
+## 7. CI is green, but Supervisor says the add-on or image is not found
+
+**Symptom:** The build workflow is green and the store URL in Home Assistant is
+correct, yet Supervisor cannot add the store, says the add-on is not found, or
+fails to pull the image. The error often sounds like a missing repository or tag
+and does not mention package visibility or authentication.
+
+**Cause:** Supervisor is the consumer, and it clones add-on stores and pulls
+container images **anonymously**. A private GitHub repository cannot be cloned as
+a store. GHCR packages also publish private by default in this setup, so a green
+workflow can successfully create both images while anonymous Supervisor pulls
+still receive HTTP `401`. CI proved that the producer ran; it did not prove that
+the consumer can reach the artifact.
+
+**Fix:** Make the GitHub repository public, set both advertised GHCR packages
+(`amd64-addon-hello` and `aarch64-addon-hello`) to public, and then probe the
+registry without credentials:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}' \
+  https://ghcr.io/v2/soul-brews-studio/aarch64-addon-hello/tags/list
+```
+
+Interpret the result before changing or installing anything:
+
+- `200` — the package is anonymously reachable and Supervisor can pull it;
+- `401` — the package exists but is private; fix package visibility;
+- `404` — the image or tag is genuinely absent; fix the build, name, or tag.
+
+Repeat the anonymous probe for `amd64-addon-hello`. Only after both architectures
+return `200` should `config.yaml` point at the image. Pointing an installed
+add-on at a tag that cannot be pulled breaks the **installed add-on**, not merely
+a new installation.
+
+The general rule is consumer-side verification: a green CI run proves the
+workflow ran, not that its artifact is usable by the system that needs it.
