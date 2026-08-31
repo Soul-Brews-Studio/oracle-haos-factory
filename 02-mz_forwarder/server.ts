@@ -16,6 +16,7 @@ const mqtt_pass = process.env.MQTT_PASS ?? "changeme";
 const topic = process.env.TOPIC ?? "FloodBoy/#";
 const api_endpoint = process.env.API_ENDPOINT ?? "";
 const dry_run = (process.env.DRY_RUN ?? "true") === "true";
+const mapping_url = process.env.MAPPING_URL ?? "";
 
 // The broker's add-on hostname uses a HYPHEN: core_mosquitto is the SLUG, and
 // Home Assistant converts underscores to hyphens for container hostnames. The
@@ -32,13 +33,25 @@ interface Stats {
   lastTopic: string | null;
   lastAt: string | null;
   lastError: string | null;
+  dropped: number;
 }
 const stats: Stats = {
   connected: false, connectedAt: null, received: 0, forwarded: 0,
-  failed: 0, lastTopic: null, lastAt: null, lastError: null,
+  failed: 0, lastTopic: null, lastAt: null, lastError: null, dropped: 0,
 };
 
 const log = (m: string) => console.log(`[mz_forwarder] ${m}`);
+
+// At ~90 messages/second a line per message is not a log, it is a firehose that
+// costs disk and hides real events. Per-message detail lives in the sidebar and
+// /api/readings; the log gets one summary line per interval.
+let sinceSummary = { received: 0, forwarded: 0, dropped: 0, failed: 0 };
+setInterval(() => {
+  const s = sinceSummary;
+  if (s.received === 0) return;             // silence is not worth a line
+  log(`60s: received ${s.received} · forwarded ${s.forwarded} · dropped ${s.dropped} · failed ${s.failed}`);
+  sinceSummary = { received: 0, forwarded: 0, dropped: 0, failed: 0 };
+}, 60_000);
 
 // Last N readings, in memory only. /data is the persisted path, but a live view
 // does not need history to survive a restart and a growing file on a lab guest
@@ -80,30 +93,75 @@ function decodePublish(buf: Uint8Array, start: number, len: number) {
 }
 
 /**
- * The transform. mz_forwarder does this in Starlark inside Telegraf; here it is
- * one function so the shape is visible and testable. Topic segments become
- * fields, which is what the CCDC endpoints expect per device model.
+ * The transform, ported from 00_mz_forwarder's Starlark `apply(metric)`
+ * (02-config/starlark/output.star). Three behaviours matter, and the third is
+ * the one a naive port misses:
+ *
+ *   1. FIELD ALLOWLIST. `db_field_mappings[dbname]` is a list of {key, as}.
+ *      Listed fields are renamed; **everything else is dropped**. It is a
+ *      whitelist, not a rename table.
+ *   2. IDENTITY. For a `/status` topic the nickname is the SECOND-TO-LAST topic
+ *      segment, and `webid_map[nickname]` supplies the `webid` tag.
+ *   3. DROP THE UNIDENTIFIABLE. If the nickname has no webid, the original
+ *      returns None — the metric goes to NO output, not even InfluxDB. Sending
+ *      an unidentifiable series downstream is worse than sending nothing,
+ *      because it lands as data nobody can attribute.
+ *
+ * Both maps are DATA, not configuration — hundreds of entries — so they are
+ * fetched from `mapping_url` rather than pasted into options. With no mapping
+ * loaded the add-on reports `identified: false` and drops nothing, which is
+ * honest about being a pass-through instead of pretending to transform.
  */
+interface Mapping {
+  webid_map?: Record<string, { webid: number | string }>;
+  field_map?: Record<string, Array<{ key: string; as: string }>>;
+}
+let mapping: Mapping = {};
+let mappingLoaded = false;
+
+async function loadMapping() {
+  if (!mapping_url) return;
+  try {
+    const res = await fetch(mapping_url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) { log(`mapping fetch: HTTP ${res.status}`); return; }
+    mapping = (await res.json()) as Mapping;
+    mappingLoaded = true;
+    log(`mapping loaded: ${Object.keys(mapping.webid_map ?? {}).length} webids, ` +
+        `${Object.keys(mapping.field_map ?? {}).length} field maps`);
+  } catch (e) {
+    log(`mapping fetch failed: ${String((e as Error).message ?? e).slice(0, 120)}`);
+  }
+}
+
 function toReading(t: string, payload: string) {
   const parts = t.split("/");
   const value = Number(payload);
-  return {
+  const base = {
     topic: t,
     device: parts[1] ?? null,
     metric: parts.slice(2).join("/") || null,
     value: Number.isFinite(value) ? value : null,
     raw: Number.isFinite(value) ? null : payload,
+    webid: null as string | null,
     ts: new Date().toISOString(),
   };
+
+  // Identity resolution applies to /status topics, as in the original.
+  if (t.includes("/status")) {
+    const nickname = parts[parts.length - 2] ?? "";
+    const found = mapping.webid_map?.[nickname];
+    if (found) base.webid = String(found.webid);
+    else if (mappingLoaded) return null;   // unidentifiable: drop, do not forward
+  }
+  return base;
 }
 
-async function forward(reading: ReturnType<typeof toReading>) {
+async function forward(reading: NonNullable<ReturnType<typeof toReading>>) {
   // dry_run is the DEFAULT. A lab guest must not post to a production
   // endpoint because someone left a field blank.
-  if (dry_run || !api_endpoint) {
-    log(`dry-run ${reading.topic} = ${reading.value ?? reading.raw}`);
-    return;
-  }
+  // No per-message log line here: see the 60s summary. dry_run is the default
+  // so a lab guest cannot post to production because a field was left blank.
+  if (dry_run || !api_endpoint) return;
   try {
     const res = await fetch(api_endpoint, {
       method: "POST",
@@ -111,10 +169,10 @@ async function forward(reading: ReturnType<typeof toReading>) {
       body: JSON.stringify(reading),
       signal: AbortSignal.timeout(10_000),
     });
-    if (res.ok) { stats.forwarded++; }
+    if (res.ok) { stats.forwarded++; sinceSummary.forwarded++; }
     else { stats.failed++; stats.lastError = `HTTP ${res.status}`; }
   } catch (e) {
-    stats.failed++;
+    stats.failed++; sinceSummary.failed++;
     stats.lastError = String((e as Error).message ?? e).slice(0, 200);
   }
 }
@@ -163,7 +221,9 @@ function connect() {
           } else if (type === 3) {                     // PUBLISH
             const { topic: t, payload } = decodePublish(buf, i, len);
             stats.received++; stats.lastTopic = t; stats.lastAt = new Date().toISOString();
+            sinceSummary.received++;
             const reading = toReading(t, payload);
+            if (!reading) { stats.dropped++; sinceSummary.dropped++; break; }
             recent.unshift(reading);
             if (recent.length > RECENT_MAX) recent.length = RECENT_MAX;
             void forward(reading);
@@ -191,6 +251,7 @@ function connect() {
     setTimeout(connect, 5000);
   });
 }
+void loadMapping();
 connect();
 
 const PAGE = `<!doctype html><meta charset="utf-8"><title>MZ Forwarder</title>
@@ -273,6 +334,8 @@ Bun.serve({
         topic,
         dry_run: dry_run || !api_endpoint,
         api_endpoint_set: api_endpoint.length > 0,
+        mapping_loaded: mappingLoaded,
+        webids: Object.keys(mapping.webid_map ?? {}).length,
         ...stats,
       });
     }

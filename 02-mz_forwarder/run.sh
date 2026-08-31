@@ -42,6 +42,10 @@ DRY_RUN="$(bashio::config 'dry_run')"
 [ "${DRY_RUN}" = "null" ] && DRY_RUN='true'
 export DRY_RUN
 
+MAPPING_URL="$(bashio::config 'mapping_url')"
+[ "${MAPPING_URL}" = "null" ] && MAPPING_URL=''
+export MAPPING_URL
+
 export PORT=8100
 
 bashio::log.info "Mz Forwarder starting on port 8100"

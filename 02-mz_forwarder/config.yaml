@@ -49,6 +49,7 @@ options:
   topic: "FloodBoy/#"
   api_endpoint: ""
   dry_run: true
+  mapping_url: ""
 schema:
   # String options use str. An empty default under url? fails validation before
   # the container exists, so the add-on log is empty and points at the wrong layer.
@@ -58,3 +59,7 @@ schema:
   topic: str
   api_endpoint: str
   dry_run: bool
+  # Optional. JSON of {webid_map, field_map}. `str?` allows empty: a plain
+  # `str` with an empty default fails Supervisor validation before the
+  # container exists, which leaves the add-on log empty.
+  mapping_url: str?
