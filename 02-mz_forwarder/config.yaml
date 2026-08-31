@@ -1,0 +1,60 @@
+name: "Mz Forwarder"
+version: "0.1.0"
+slug: "mz_forwarder"
+description: >-
+  A generated Oracle HAOS Factory example with its configuration bridge kept
+  consistent by construction.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/02-mz_forwarder"
+
+# A published image makes installation a pull instead of building on the HAOS
+# machine. It also moves failures into CI, where they cannot masquerade as a
+# successful update that quietly leaves an old image running.
+image: "ghcr.io/soul-brews-studio/{arch}-addon-mz_forwarder"
+arch:
+  - amd64
+  - aarch64
+startup: application
+# Reboots must restore the service without a human reopening the add-on page.
+boot: auto
+# Home Assistant base images already own PID 1 through s6-overlay.
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# Ingress serves a browser with an HA session; API consumers need a stable port
+# because they cannot authenticate to or address an ingress URL.
+ingress: true
+ingress_port: 8100
+panel_icon: mdi:transit-connection-variant
+panel_title: "Mz Forwarder"
+panel_admin: false
+ports:
+  8100/tcp: 8100
+ports_description:
+  8100/tcp: "Web endpoint and health API"
+
+# /data is the only add-on path Supervisor persists across updates and includes
+# in Home Assistant backups, even when this first scaffold stores nothing yet.
+map:
+  - data:rw
+stage: experimental
+
+# Generated from the same option definitions as run.sh and server.ts. Adding an
+# option to only this surface recreates Trap 6 and is intentionally unsupported.
+options:
+  mqtt_host: "mqtt.laris.co"
+  mqtt_user: "nat"
+  mqtt_pass: "changeme"
+  topic: "FloodBoy/#"
+  api_endpoint: ""
+  dry_run: true
+schema:
+  # String options use str. An empty default under url? fails validation before
+  # the container exists, so the add-on log is empty and points at the wrong layer.
+  mqtt_host: str
+  mqtt_user: str
+  mqtt_pass: str
+  topic: str
+  api_endpoint: str
+  dry_run: bool

@@ -8,12 +8,13 @@ on:
     branches: [main]
     paths:
       - "01-hello/**"
+      - "02-mz_forwarder/**"
       - ".github/workflows/builder.yml"
   workflow_dispatch:
 
 jobs:
   build:
-    name: ${{ matrix.arch }}
+    name: ${{ matrix.addon.dir }} ${{ matrix.arch }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +25,12 @@ jobs:
         # Publish every architecture advertised by config.yaml; otherwise the
         # store contract says Pi installs work while the required image is absent.
         arch: [amd64, aarch64]
+        # One entry per add-on directory. A store that lists an add-on whose
+        # image was never published fails at install with "image not found",
+        # which reads as a Supervisor fault rather than a missing build.
+        addon:
+          - { dir: "01-hello", image: "hello" }
+          - { dir: "02-mz_forwarder", image: "mz_forwarder" }
 
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +45,7 @@ jobs:
         with:
           args: |
             --${{ matrix.arch }} \
-            --target 01-hello \
-            --image {arch}-addon-hello \
+            --target ${{ matrix.addon.dir }} \
+            --image {arch}-addon-${{ matrix.addon.image }} \
             --docker-hub ghcr.io/soul-brews-studio \
             --addon
