@@ -57,6 +57,19 @@ setInterval(() => {
 // does not need history to survive a restart and a growing file on a lab guest
 // is a slow disk leak.
 const RECENT_MAX = 200;
+
+// Per-topic counters and a rate. "1828 messages" says the pipe is open; it does
+// not say WHICH devices are reporting or whether one has gone quiet. Counting
+// by device and by metric is what turns a firehose into an inventory.
+const byDevice = new Map<string, { count: number; last: number }>();
+const byMetric = new Map<string, number>();
+// Sliding 60s window of arrival timestamps, for messages/second.
+let arrivals: number[] = [];
+function rate(): number {
+  const cutoff = Date.now() - 60_000;
+  arrivals = arrivals.filter((t) => t >= cutoff);
+  return Math.round((arrivals.length / 60) * 10) / 10;
+}
 const recent: Array<{ topic: string; device: string | null; metric: string | null; value: number | null; raw: string | null; ts: string }> = [];
 
 // ── minimal MQTT 3.1.1 ──────────────────────────────────────────────────────
@@ -222,8 +235,14 @@ function connect() {
             const { topic: t, payload } = decodePublish(buf, i, len);
             stats.received++; stats.lastTopic = t; stats.lastAt = new Date().toISOString();
             sinceSummary.received++;
+            arrivals.push(Date.now());
             const reading = toReading(t, payload);
             if (!reading) { stats.dropped++; sinceSummary.dropped++; break; }
+            if (reading.device) {
+              const d = byDevice.get(reading.device) ?? { count: 0, last: 0 };
+              d.count++; d.last = Date.now(); byDevice.set(reading.device, d);
+            }
+            if (reading.metric) byMetric.set(reading.metric, (byMetric.get(reading.metric) ?? 0) + 1);
             recent.unshift(reading);
             if (recent.length > RECENT_MAX) recent.length = RECENT_MAX;
             void forward(reading);
@@ -271,13 +290,29 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>MZ Forwarder</title>
  tr:last-child td{border-bottom:0}
  td.n{text-align:right}
  .mut{color:var(--mut)}
+ h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:16px 0 6px}
+ .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
 </style>
 <h1>MZ Forwarder <span class="mut" id="mode"></span></h1>
 <div class="row">
   <div class="card"><div class="k">Broker</div><div class="v" id="broker">—</div></div>
   <div class="card"><div class="k">Received</div><div class="v" id="rx">0</div></div>
   <div class="card"><div class="k">Forwarded</div><div class="v" id="fw">0</div></div>
-  <div class="card"><div class="k">Failed</div><div class="v" id="fa">0</div></div>
+  <div class="card"><div class="k">Dropped</div><div class="v" id="dr">0</div></div>
+  <div class="card"><div class="k">Rate</div><div class="v" id="rt">0</div><div class="k">msg/sec</div></div>
+  <div class="card"><div class="k">Devices</div><div class="v" id="dv">0</div></div>
+</div>
+<div class="grid">
+ <div>
+  <h2>Devices</h2>
+  <table><thead><tr><th>Device</th><th class="n">Msgs</th><th class="n">Quiet</th></tr></thead>
+  <tbody id="devs"><tr><td colspan="3" class="mut">—</td></tr></tbody></table>
+ </div>
+ <div>
+  <h2>Topics</h2>
+  <table><thead><tr><th>Metric</th><th class="n">Msgs</th></tr></thead>
+  <tbody id="mets"><tr><td colspan="2" class="mut">—</td></tr></tbody></table>
+ </div>
 </div>
 <table><thead><tr><th>Time</th><th>Device</th><th>Metric</th><th class="n">Value</th></tr></thead>
 <tbody id="rows"><tr><td colspan="4" class="mut">waiting for messages…</td></tr></tbody></table>
@@ -293,6 +328,16 @@ async function tick(){
     document.getElementById("rx").textContent = s.received;
     document.getElementById("fw").textContent = s.forwarded;
     document.getElementById("fa").textContent = s.failed;
+    document.getElementById("dr").textContent = s.dropped ?? 0;
+    document.getElementById("rt").textContent = d.rate;
+    document.getElementById("dv").textContent = d.devices.length;
+    document.getElementById("devs").innerHTML = d.devices.slice(0,12).map(x =>
+      "<tr><td>" + esc(x.name) + "</td><td class=n>" + x.count +
+      "</td><td class='n mut'>" + (x.quietFor > 90 ? x.quietFor + "s" : "") + "</td></tr>").join("")
+      || "<tr><td colspan=3 class=mut>none yet</td></tr>";
+    document.getElementById("mets").innerHTML = d.metrics.map(x =>
+      "<tr><td>" + esc(x.name) + "</td><td class=n>" + x.count + "</td></tr>").join("")
+      || "<tr><td colspan=2 class=mut>none yet</td></tr>";
     document.getElementById("mode").textContent = s.lastError ? "— " + s.lastError : "";
     const rows = d.recent.map(x =>
       "<tr><td class=mut>" + esc(x.ts.slice(11,19)) + "</td><td>" + esc(x.device) +
@@ -319,7 +364,18 @@ Bun.serve({
     }
 
     if (request.method === "GET" && pathname === "/api/readings") {
-      return Response.json({ recent: recent.slice(0, 60), stats });
+      const now = Date.now();
+      const devices = [...byDevice.entries()]
+        .map(([name, d]) => ({ name, count: d.count, quietFor: Math.round((now - d.last) / 1000) }))
+        .sort((a, b) => b.count - a.count);
+      const metrics = [...byMetric.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count).slice(0, 12);
+      return Response.json({
+        recent: recent.slice(0, 40), stats,
+        rate: rate(), devices, metrics,
+        mapping_loaded: mappingLoaded,
+      });
     }
 
     if (request.method === "GET" && pathname === "/api/health") {
