@@ -46,6 +46,10 @@ MAPPING_URL="$(bashio::config 'mapping_url')"
 [ "${MAPPING_URL}" = "null" ] && MAPPING_URL=''
 export MAPPING_URL
 
+DBNAME="$(bashio::config 'dbname')"
+[ "${DBNAME}" = "null" ] && DBNAME=''
+export DBNAME
+
 export PORT=8100
 
 bashio::log.info "Mz Forwarder starting on port 8100"

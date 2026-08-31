@@ -18,6 +18,12 @@ const api_endpoint = process.env.API_ENDPOINT ?? "";
 const dry_run = (process.env.DRY_RUN ?? "true") === "true";
 const mapping_url = process.env.MAPPING_URL ?? "";
 
+// `dbname` selects the field allowlist. It is NOT recoverable from MQTT — see
+// the long comment above toReading() — so it is an OPTION, exactly as it is a
+// per-container config literal in the upstream Telegraf deployment. Empty means
+// "no allowlist resolved", which this add-on reports rather than papers over.
+const dbname_opt = process.env.DBNAME ?? "";
+
 // The broker's add-on hostname uses a HYPHEN: core_mosquitto is the SLUG, and
 // Home Assistant converts underscores to hyphens for container hostnames. The
 // slug form does not resolve, and the failure reads as a broker fault.
@@ -34,10 +40,16 @@ interface Stats {
   lastAt: string | null;
   lastError: string | null;
   dropped: number;
+  // Split so "the transform is running" can never be inferred from "messages are
+  // flowing". Upstream, 100% of this add-on's default traffic is in the second
+  // bucket, and a single counter would have hidden that.
+  mapped: number;          // status docs an allowlist was actually applied to
+  notApplicable: number;   // messages no allowlist can describe (see toReading)
 }
 const stats: Stats = {
   connected: false, connectedAt: null, received: 0, forwarded: 0,
   failed: 0, lastTopic: null, lastAt: null, lastError: null, dropped: 0,
+  mapped: 0, notApplicable: 0,
 };
 
 const log = (m: string) => console.log(`[mz_forwarder] ${m}`);
@@ -70,7 +82,7 @@ function rate(): number {
   arrivals = arrivals.filter((t) => t >= cutoff);
   return Math.round((arrivals.length / 60) * 10) / 10;
 }
-const recent: Array<{ topic: string; device: string | null; metric: string | null; value: number | null; raw: string | null; ts: string }> = [];
+const recent: Reading[] = [];
 
 // ── minimal MQTT 3.1.1 ──────────────────────────────────────────────────────
 const str = (s: string): number[] => {
@@ -106,28 +118,80 @@ function decodePublish(buf: Uint8Array, start: number, len: number) {
 }
 
 /**
- * The transform, ported from 00_mz_forwarder's Starlark `apply(metric)`
- * (02-config/starlark/output.star). Three behaviours matter, and the third is
- * the one a naive port misses:
+ * The transform, ported from 00_mz_forwarder's Starlark `apply(metric)`.
  *
+ * THE CONSTRAINT THAT SHAPES ALL OF THIS. The field allowlist is selected by
+ * `metric.tags.get("dbname", ...)`, and `dbname` is a STATIC TAG Telegraf stamps
+ * from its own config — 02-config/templates/telegraf_config.j2 renders
+ *   [inputs.mqtt_consumer.tags]
+ *     dbname = "{{ dbname }}"
+ * from the `dbname:` line of each hand-written params YAML. It is in neither the
+ * topic string nor the payload (the live status document's top-level keys are
+ * d, heap, info, millis, nickname, rssi — no dbname), and nothing in that repo
+ * derives it: `topic_parsing` appears zero times across the whole checkout.
+ * A direct MQTT subscriber can never read it off the wire.
+ *
+ * It is ALSO not derivable from the topic, and one FloodBoy fact proves it:
+ * 07-output/telegraf.d/5m/027_model_floodboy.yml.conf and
+ * 07-output/telegraf.d/1s/020_floodboy.yml.conf subscribe to the SAME pattern,
+ * `FloodBoy/+/status`, and stamp DIFFERENT dbnames (model_floodboy,
+ * floodboydb_realtime). Both containers are live. Identical bytes, two answers,
+ * decided only by which container is running. So dbname comes from THIS add-on's
+ * own configuration — the `dbname` option — which is the same place Telegraf
+ * gets it. There is no cleverer source and pretending otherwise is a guess.
+ *
+ * WHAT DOES AND DOES NOT GET A FIELD MAP. Every allowlist key is a FLATTENED
+ * STATUS-DOCUMENT path — `d_radar_water_depth`, `d_battery_voltage`,
+ * `d_rainfall_rainfall_mm` — i.e. Telegraf's json parser applied to the single
+ * JSON document published on `<Model>/<nickname>/status`. The per-metric topics
+ * this add-on sees by default,
+ *   FloodBoy/FloodBoy045/sensor/water_level/state       -> 0.000
+ *   FloodBoy/FloodBoy027/sensor/radar__raw_message/state -> REALWATERDEPTH=0.495m
+ * are a different shape entirely: five levels deep, one scalar per message, and
+ * NO config in the upstream repo subscribes to them. Their key space
+ * (`water_level`, `radar__raw_message`) shares not one member with any allowlist.
+ * Running them through the allowlist would drop 100% of fields on 100% of
+ * messages while the counters still climbed — a transform that silently deletes
+ * everything looks identical to a transform that works. So they are declared
+ * NOT APPLICABLE, explicitly, and pass through untouched.
+ *
+ * Three behaviours are ported; the third is the one a naive port misses:
  *   1. FIELD ALLOWLIST. `db_field_mappings[dbname]` is a list of {key, as}.
- *      Listed fields are renamed; **everything else is dropped**. It is a
- *      whitelist, not a rename table.
+ *      Listed fields are renamed; **everything else is dropped**. Whitelist,
+ *      not rename table.
  *   2. IDENTITY. For a `/status` topic the nickname is the SECOND-TO-LAST topic
  *      segment, and `webid_map[nickname]` supplies the `webid` tag.
  *   3. DROP THE UNIDENTIFIABLE. If the nickname has no webid, the original
  *      returns None — the metric goes to NO output, not even InfluxDB. Sending
- *      an unidentifiable series downstream is worse than sending nothing,
- *      because it lands as data nobody can attribute.
+ *      an unidentifiable series downstream is worse than sending nothing.
+ *
+ * ONE DELIBERATE DEVIATION, stated rather than hidden: upstream, an unknown
+ * dbname short-circuits at the TOP of apply() (`return metric` unchanged), so
+ * the webid drop never runs for it. Here the webid gate runs regardless of
+ * whether a field map resolved. Refusing to forward a series nobody can
+ * attribute is a safety property; it should not switch off because an unrelated
+ * option was left blank.
+ *
+ * NOT PORTED, on purpose: the range gates (water_depth > 20.0 -> rejected,
+ * battery_voltage outside 0-30, air_height outside 0-40) that exist only in the
+ * realtime container's forked 05-docker/starlark/output.star. That fork's
+ * webid_map contains ZERO FloodBoy entries, so its own webid gate returns None
+ * before any range check executes — the gates are dead code upstream. Copying
+ * dead validation across and calling it parity would be the same lie as the
+ * empty allowlist.
  *
  * Both maps are DATA, not configuration — hundreds of entries — so they are
- * fetched from `mapping_url` rather than pasted into options. With no mapping
- * loaded the add-on reports `identified: false` and drops nothing, which is
- * honest about being a pass-through instead of pretending to transform.
+ * fetched from `mapping_url` rather than pasted into options.
  */
 interface Mapping {
   webid_map?: Record<string, { webid: number | string }>;
   field_map?: Record<string, Array<{ key: string; as: string }>>;
+  // Optional, and only ever a DEFAULT for the dbname option — never an override.
+  // The upstream generator already emits most of this as
+  // 03-services/proxy-http-honojs/params/config.json (dbname -> telegraf.topics);
+  // note that generator globs 02-config/params only, so `floodboydb_realtime`
+  // is missing from it and has to be added by hand.
+  topic_map?: Array<{ dbname: string; topics: string[] }>;
 }
 let mapping: Mapping = {};
 let mappingLoaded = false;
@@ -141,39 +205,149 @@ async function loadMapping() {
     mappingLoaded = true;
     log(`mapping loaded: ${Object.keys(mapping.webid_map ?? {}).length} webids, ` +
         `${Object.keys(mapping.field_map ?? {}).length} field maps`);
+    log(`dbname: ${describeDbnameSource()}`);
   } catch (e) {
     log(`mapping fetch failed: ${String((e as Error).message ?? e).slice(0, 120)}`);
   }
 }
 
-function toReading(t: string, payload: string) {
+/** MQTT wildcard match. `#` is terminal and swallows the rest; `+` is one level. */
+function topicMatches(pattern: string, t: string): boolean {
+  const p = pattern.split("/"), s = t.split("/");
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] === "#") return true;
+    if (i >= s.length) return false;
+    if (p[i] !== "+" && p[i] !== s[i]) return false;
+  }
+  return p.length === s.length;
+}
+
+const sameFieldList = (a?: Array<{ key: string; as: string }>, b?: Array<{ key: string; as: string }>) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Resolve dbname for one topic. The option wins outright — it is the faithful
+ * equivalent of Telegraf's per-container tag. topic_map is only consulted when
+ * the option is blank, and it REFUSES to pick when two dbnames match the same
+ * topic with different allowlists. `Model-NH/+/status` is exactly that case
+ * (model_n-nh keys 1_pm*, model_n-nh-wifi keys d_pm*); guessing there would
+ * silently drop every field of whichever model guessed wrong. FloodBoy also
+ * matches two dbnames, but their field lists are byte-identical, so either
+ * answer is the same answer and the match is allowed to stand.
+ */
+function resolveDbname(t: string): string | null {
+  if (dbname_opt) return dbname_opt;
+  const hits = (mapping.topic_map ?? [])
+    .filter((e) => e.topics.some((p) => topicMatches(p, t)))
+    .map((e) => e.dbname);
+  if (hits.length === 0) return null;
+  const first = mapping.field_map?.[hits[0]!];
+  if (hits.every((d) => sameFieldList(mapping.field_map?.[d], first))) return hits[0]!;
+  return null;   // genuinely ambiguous — refuse rather than guess
+}
+
+function describeDbnameSource(): string {
+  if (dbname_opt) return `"${dbname_opt}" (option)`;
+  if (mapping.topic_map?.length) return "per-topic from mapping.topic_map";
+  return "unset — no field allowlist will be applied";
+}
+
+/**
+ * Telegraf's `data_format = "json"` flattens nested objects with `_`, which is
+ * why the allowlist keys read `d_radar_water_depth` and not `d.radar.water_depth`.
+ * Non-numeric leaves are dropped because that parser also discards them by
+ * default — `info.ssid` and `nickname` never reach the Starlark as fields, so an
+ * allowlist that kept them here would not be the same allowlist.
+ */
+function flattenNumeric(o: unknown, prefix = "", out: Record<string, number> = {}): Record<string, number> {
+  if (o === null || typeof o !== "object") return out;
+  for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+    const key = prefix ? `${prefix}_${k}` : k;
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) flattenNumeric(v, key, out);
+    else if (typeof v === "number" && Number.isFinite(v)) out[key] = v;
+    else if (typeof v === "boolean") out[key] = v ? 1 : 0;
+  }
+  return out;
+}
+
+interface Reading {
+  topic: string;
+  device: string | null;
+  metric: string | null;
+  value: number | null;
+  raw: string | null;
+  webid: string | null;
+  dbname: string | null;
+  /** Present only when an allowlist was applied. Absent is not the same as {}. */
+  fields?: Record<string, number>;
+  /** False says "no allowlist can describe this message", not "none was set". */
+  field_map_applied: boolean;
+  ts: string;
+}
+
+function toReading(t: string, payload: string): Reading | null {
   const parts = t.split("/");
   const value = Number(payload);
-  const base = {
+  const isStatus = t.includes("/status");
+
+  const base: Reading = {
     topic: t,
     device: parts[1] ?? null,
     metric: parts.slice(2).join("/") || null,
     value: Number.isFinite(value) ? value : null,
     raw: Number.isFinite(value) ? null : payload,
-    webid: null as string | null,
+    webid: null,
+    dbname: null,
+    field_map_applied: false,
     ts: new Date().toISOString(),
   };
 
   // Identity resolution applies to /status topics, as in the original.
-  if (t.includes("/status")) {
+  if (isStatus) {
     const nickname = parts[parts.length - 2] ?? "";
     const found = mapping.webid_map?.[nickname];
     if (found) base.webid = String(found.webid);
     else if (mappingLoaded) return null;   // unidentifiable: drop, do not forward
   }
+
+  // Everything below is the field allowlist, and it is gated on `isStatus`
+  // because the allowlist keys ARE flattened status-document paths. A
+  // `sensor/<name>/state` message carries one scalar and no document; there is
+  // nothing for an allowlist to select from and no honest way to fake one.
+  if (!isStatus) { stats.notApplicable++; return base; }
+
+  const dbname = resolveDbname(t);
+  base.dbname = dbname;
+  const allow = dbname ? mapping.field_map?.[dbname] : undefined;
+  if (!allow) { stats.notApplicable++; return base; }
+
+  let doc: unknown;
+  try { doc = JSON.parse(payload); } catch { stats.notApplicable++; return base; }
+
+  const flat = flattenNumeric(doc);
+  const out: Record<string, number> = {};
+  for (const { key, as } of allow) {
+    // `{key: "topic", as: "topic"}` appears in every mapping and is inert
+    // upstream too — `topic` is a Telegraf TAG, never a field, so the rename
+    // loop never matches it. It falls out here for the same reason.
+    const v = flat[key];
+    if (v !== undefined) out[as] = v;
+  }
+
+  base.fields = out;
+  base.field_map_applied = true;
+  base.value = null;
+  // The dashboard has one value column and a status document has no single
+  // value; a compact summary keeps that row informative without a UI change.
+  base.raw = Object.entries(out).map(([k, v]) => `${k}=${v}`).join(" ") || null;
+  stats.mapped++;
   return base;
 }
 
-async function forward(reading: NonNullable<ReturnType<typeof toReading>>) {
+async function forward(reading: Reading) {
   // dry_run is the DEFAULT. A lab guest must not post to a production
   // endpoint because someone left a field blank.
-  // No per-message log line here: see the 60s summary. dry_run is the default
-  // so a lab guest cannot post to production because a field was left blank.
+  // No per-message log line here: see the 60s summary.
   if (dry_run || !api_endpoint) return;
   try {
     const res = await fetch(api_endpoint, {
@@ -299,6 +473,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>MZ Forwarder</title>
   <div class="card"><div class="k">Received</div><div class="v" id="rx">0</div></div>
   <div class="card"><div class="k">Forwarded</div><div class="v" id="fw">0</div></div>
   <div class="card"><div class="k">Dropped</div><div class="v" id="dr">0</div></div>
+  <div class="card"><div class="k">Mapped</div><div class="v" id="mp">0</div><div class="k" id="mpnote">field map</div></div>
   <div class="card"><div class="k">Rate</div><div class="v" id="rt">0</div><div class="k">msg/sec</div></div>
   <div class="card"><div class="k">Devices</div><div class="v" id="dv">0</div></div>
 </div>
@@ -327,8 +502,12 @@ async function tick(){
     document.getElementById("broker").className = "v " + (s.connected ? "ok" : "bad");
     document.getElementById("rx").textContent = s.received;
     document.getElementById("fw").textContent = s.forwarded;
-    document.getElementById("fa").textContent = s.failed;
     document.getElementById("dr").textContent = s.dropped ?? 0;
+    document.getElementById("mp").textContent = s.mapped ?? 0;
+    // A zero here with traffic flowing is the honest signal that no allowlist
+    // describes this topic shape — it must never read as a silent success.
+    document.getElementById("mpnote").textContent =
+      (s.mapped ? "field map" : "not applicable (" + (s.notApplicable ?? 0) + ")");
     document.getElementById("rt").textContent = d.rate;
     document.getElementById("dv").textContent = d.devices.length;
     document.getElementById("devs").innerHTML = d.devices.slice(0,12).map(x =>
@@ -383,6 +562,13 @@ Bun.serve({
       // a health endpoint that prints a credential is the same defect class as
       // an add-on `schema` call printing its own options, which leaked a key on
       // 2026-08-28. Report the endpoint's SHAPE, never its secrets.
+      //
+      // field_map_applicable is the field this whole patch exists to be able to
+      // answer truthfully. `false` with traffic flowing means the allowlist does
+      // not describe the topics arriving — not that the add-on is broken, and
+      // not that the transform quietly succeeded.
+      const dbname = dbname_opt || null;
+      const allow = dbname ? mapping.field_map?.[dbname] : undefined;
       return Response.json({
         status: stats.connected ? "ok" : "degraded",
         slug: "mz_forwarder",
@@ -392,6 +578,17 @@ Bun.serve({
         api_endpoint_set: api_endpoint.length > 0,
         mapping_loaded: mappingLoaded,
         webids: Object.keys(mapping.webid_map ?? {}).length,
+        dbname,
+        dbname_source: describeDbnameSource(),
+        // dbname can never come off the wire: it is a Telegraf static tag, and
+        // the same FloodBoy/+/status topic carries two different values in two
+        // live containers. Anything but "option"/"topic_map" would be invented.
+        dbname_from_message: false,
+        field_map_keys: Object.keys(mapping.field_map ?? {}).length,
+        field_map_fields: allow?.length ?? 0,
+        field_map_applicable: stats.mapped > 0,
+        field_map_applied: stats.mapped,
+        field_map_not_applicable: stats.notApplicable,
         ...stats,
       });
     }

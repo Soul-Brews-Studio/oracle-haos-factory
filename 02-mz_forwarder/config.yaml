@@ -50,6 +50,7 @@ options:
   api_endpoint: ""
   dry_run: true
   mapping_url: ""
+  dbname: ""
 schema:
   # String options use str. An empty default under url? fails validation before
   # the container exists, so the add-on log is empty and points at the wrong layer.
@@ -63,3 +64,6 @@ schema:
   # `str` with an empty default fails Supervisor validation before the
   # container exists, which leaves the add-on log empty.
   mapping_url: str?
+  # Selects the field allowlist. NOT recoverable from MQTT — it is a per-container
+  # config literal upstream too, so it is an option here for the same reason.
+  dbname: str?
