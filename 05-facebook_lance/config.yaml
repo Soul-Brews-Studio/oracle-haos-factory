@@ -6,7 +6,6 @@ description: >-
   backed by an Ivy Bridge-safe local LanceDB index.
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/05-facebook_lance"
 
-image: "ghcr.io/soul-brews-studio/{arch}-addon-facebook_lance"
 arch:
   - amd64
 startup: application

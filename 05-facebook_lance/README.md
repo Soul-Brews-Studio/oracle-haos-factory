@@ -72,6 +72,7 @@ sh -n 05-facebook_lance/run.sh
 docker build --platform linux/amd64 -t facebook-lance-addon:test 05-facebook_lance
 ```
 
-Deployment is intentionally separate from image construction. Confirm the
-private database exists, publish the `amd64-addon-facebook_lance` image, make
-the GHCR package anonymously pullable, then install/update through Supervisor.
+This directory is installed as a local app, so Supervisor builds the image from
+its Dockerfile. Confirm the private database exists, reload the app store, then
+rebuild `local_facebook_lance`; no registry pull or published private-data image
+is required.
