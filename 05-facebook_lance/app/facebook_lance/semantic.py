@@ -522,6 +522,18 @@ def semantic_search(
         raise ValueError("query must contain between 1 and 200 characters")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
         raise ValueError("limit must be between 1 and 50")
+    return _semantic_search_records(db_uri, provider, query, limit=limit)
+
+
+def _semantic_search_records(
+    db_uri: str,
+    provider: EmbeddingProvider,
+    query: str,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return ranked records for a validated internal retrieval request."""
+
     if provider.vector_space_id != E5_VECTOR_SPACE_ID:
         raise EmbeddingUnavailable("provider vector space does not match the index")
     db = connect_db(db_uri)
@@ -588,6 +600,17 @@ def lexical_search(
         raise ValueError("query must contain between 1 and 200 characters")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
         raise ValueError("limit must be between 1 and 50")
+    return _lexical_search_records(db_uri, query, limit=limit)
+
+
+def _lexical_search_records(
+    db_uri: str,
+    query: str,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return ranked records for a validated internal retrieval request."""
+
     db = connect_db(db_uri)
     manifest = _read_generation_manifest(db_uri)
     if manifest is None or manifest["semantic_generation"] is None:

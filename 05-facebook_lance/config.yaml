@@ -1,5 +1,5 @@
 name: "Facebook Lance"
-version: "0.1.0"
+version: "0.1.1"
 slug: "facebook_lance"
 description: >-
   Read-only Facebook archive Feed, Chats, semantic search, and topic explorer

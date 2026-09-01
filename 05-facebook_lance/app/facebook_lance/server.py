@@ -18,6 +18,7 @@ from typing import Any, cast
 from urllib.parse import urlsplit
 
 from .embeddings import EmbeddingProvider, EmbeddingUnavailable
+from .rag import rag_query, rag_stats
 from .schema import SCHEMA_VERSION, TEXT_TRANSFORM_VERSION, arrow_schema
 from .semantic import (
     SEMANTIC_TOPIC_POINTS_TABLE,
@@ -194,6 +195,7 @@ class StudioRequestHandler(BaseHTTPRequestHandler):
             "/api/feed/query": self._feed_query,
             "/api/chats/query": self._chats_query,
             "/api/chats/thread": self._chat_thread,
+            "/api/rag/query": self._rag_query,
             "/api/search/semantic": self._semantic_query,
             "/api/topics/query": self._topics_query,
             "/api/topics/records": self._topic_records,
@@ -260,6 +262,7 @@ class StudioRequestHandler(BaseHTTPRequestHandler):
         rows = self._rows(["record_type"])
         counts = Counter(row["record_type"] for row in rows)
         derived = semantic_stats(self._studio_server.db_uri)
+        retrieval = rag_stats(self._studio_server.db_uri)
         return {
             "ready": True,
             "read_only": True,
@@ -278,6 +281,10 @@ class StudioRequestHandler(BaseHTTPRequestHandler):
                 "topics": derived["topics"],
                 "topic_points": derived["topic_points"],
                 "vector_space_id": derived["vector_space_id"],
+                "rag_ready": retrieval["ready"],
+                "retrieval_documents": retrieval["documents"],
+                "joined_post_threads": retrieval["joined_post_threads"],
+                "standalone_comments": retrieval["standalone_comments"],
             },
         }
 
@@ -577,6 +584,29 @@ class StudioRequestHandler(BaseHTTPRequestHandler):
             "semantic" if semantic_used else "lexical"
         )
         return {"items": items, "matched_count": len(items), "mode": mode}
+
+    def _rag_query(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Retrieve logical documents and bounded, citable canonical context."""
+
+        if set(request) - {"query", "limit"}:
+            raise _BadRequest
+        query = request.get("query", "")
+        limit = request.get("limit", 10)
+        if (
+            not isinstance(query, str)
+            or not query.strip()
+            or len(query) > _MAX_QUERY_CHARS
+            or isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 10
+        ):
+            raise _BadRequest
+        return rag_query(
+            self._studio_server.db_uri,
+            self._studio_server.embedding_provider,
+            query.strip(),
+            limit=limit,
+        )
 
     def _topics_query(self, request: Mapping[str, Any]) -> dict[str, Any]:
         if set(request) - {"limit"}:

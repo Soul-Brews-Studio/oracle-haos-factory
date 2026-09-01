@@ -66,6 +66,18 @@ def build_parser() -> argparse.ArgumentParser:
     semantic_build.add_argument("--batch-size", type=int, default=16)
     _json_after_subcommand(semantic_build)
 
+    rag_build = subparsers.add_parser(
+        "rag-build", help="rebuild exact post/comment retrieval membership"
+    )
+    rag_build.add_argument("--db", required=True)
+    _json_after_subcommand(rag_build)
+
+    rag_stats_parser = subparsers.add_parser(
+        "rag-stats", help="show aggregate joined-retrieval readiness"
+    )
+    rag_stats_parser.add_argument("--db", required=True)
+    _json_after_subcommand(rag_stats_parser)
+
     semantic_topics = subparsers.add_parser(
         "semantic-topics", help="rebuild deterministic topic tables"
     )
@@ -165,6 +177,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     batch_size=args.batch_size,
                 )
             )
+        elif args.command == "rag-build":
+            from .rag import build_retrieval_documents
+
+            result = asdict(build_retrieval_documents(args.db))
+        elif args.command == "rag-stats":
+            from .rag import rag_stats
+
+            result = rag_stats(args.db)
         elif args.command == "semantic-topics":
             from .semantic import build_topics, stats_asdict
 

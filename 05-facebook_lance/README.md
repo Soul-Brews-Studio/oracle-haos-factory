@@ -17,12 +17,14 @@ The add-on mounts `/share` read-only. Build the canonical and derived tables on
 a workstation, then copy the database directory to HAOS through the protected
 SSH add-on. The original Facebook ZIP should remain off HAOS.
 
-The image contains the same deterministic chunk, Thai `newmm-safe` lexical field,
-dual Lance FTS, semantic generation-manifest, and topic code as the workstation
-package. It includes PyThaiNLP and the pinned tokenizer runtime so those table
-contracts can be read and validated consistently. HAOS still does not rebuild
-them because `/share` is mounted read-only; generation remains a workstation
-operation.
+The image contains the same deterministic chunk, Thai `newmm-safe` lexical
+field, dual Lance FTS, exact post/comment retrieval membership, semantic
+generation-manifest, and topic code as the workstation package. Joined context
+is expanded only after record-level ranking, never embedded as concatenated
+text or inferred from timestamps/authors. It includes PyThaiNLP and the pinned
+tokenizer runtime so those table contracts can be read and validated
+consistently. HAOS still does not rebuild them because `/share` is mounted
+read-only; generation remains a workstation operation.
 
 ## External query embedding
 
