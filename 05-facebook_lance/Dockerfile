@@ -39,11 +39,15 @@ metadata.write_text(
 )
 PY
 RUN python - <<'PY'
-import lance
 import lancedb
+from lancedb.pydantic import LanceModel, Vector
 
 assert lancedb.__version__ == "0.38.0"
-print(lance.simd_info())
+
+class _VectorProbe(LanceModel):
+    vector: Vector(3)
+
+assert _VectorProbe.to_arrow_schema().field("vector").type.list_size == 3
 PY
 
 COPY app /app

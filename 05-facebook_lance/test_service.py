@@ -101,7 +101,9 @@ class PackagingContractTests(unittest.TestCase):
         self.assertIn("tokenizers==0.23.1", requirements)
         self.assertNotIn("onnxruntime", requirements)
         self.assertIn("python:3.12-slim-bookworm", dockerfile)
-        self.assertIn("lance.simd_info()", dockerfile)
+        self.assertNotIn("import lance\n", dockerfile)
+        self.assertIn("from lancedb.pydantic import LanceModel, Vector", dockerfile)
+        self.assertIn("_VectorProbe.to_arrow_schema()", dockerfile)
 
     def test_current_hybrid_and_generation_runtime_is_vendored(self) -> None:
         package = Path(__file__).resolve().parent / "app" / "facebook_lance"
