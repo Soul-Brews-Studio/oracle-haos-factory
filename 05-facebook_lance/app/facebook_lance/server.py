@@ -262,7 +262,10 @@ class StudioRequestHandler(BaseHTTPRequestHandler):
         rows = self._rows(["record_type"])
         counts = Counter(row["record_type"] for row in rows)
         derived = semantic_stats(self._studio_server.db_uri)
-        retrieval = rag_stats(self._studio_server.db_uri)
+        retrieval = rag_stats(
+            self._studio_server.db_uri,
+            semantic_generation=derived["semantic_generation"],
+        )
         return {
             "ready": True,
             "read_only": True,

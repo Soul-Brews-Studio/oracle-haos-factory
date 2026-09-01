@@ -121,6 +121,67 @@ class PackagingContractTests(unittest.TestCase):
         self.assertIn('"lexical_ready"', server)
 
 
+class ReadinessTests(unittest.TestCase):
+    def test_readiness_allows_a_slow_initial_status_check(self) -> None:
+        class RunningProcess:
+            def poll(self) -> None:
+                return None
+
+        class ReadyResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                return None
+
+        with (
+            patch("service.urlopen", side_effect=[TimeoutError, ReadyResponse()]) as open_status,
+            patch("service.time.sleep") as sleep,
+        ):
+            service._wait_for_studio(RunningProcess(), 8791)  # type: ignore[arg-type]
+
+        self.assertEqual(open_status.call_count, 2)
+        self.assertEqual(
+            open_status.call_args.args,
+            ("http://127.0.0.1:8791/api/status",),
+        )
+        self.assertLessEqual(
+            open_status.call_args.kwargs["timeout"],
+            service.STUDIO_READINESS_TIMEOUT_SECONDS,
+        )
+        sleep.assert_called_once()
+        self.assertGreaterEqual(service.STUDIO_READINESS_TIMEOUT_SECONDS, 5)
+
+    def test_readiness_fails_immediately_when_studio_exits(self) -> None:
+        class ExitedProcess:
+            def poll(self) -> int:
+                return 1
+
+        with (
+            patch("service.urlopen") as open_status,
+            self.assertRaisesRegex(RuntimeError, "exited before readiness"),
+        ):
+            service._wait_for_studio(ExitedProcess(), 8791)  # type: ignore[arg-type]
+
+        open_status.assert_not_called()
+
+    def test_readiness_deadline_is_bounded(self) -> None:
+        class RunningProcess:
+            def poll(self) -> None:
+                return None
+
+        with (
+            patch.object(service, "STUDIO_READINESS_DEADLINE_SECONDS", 0),
+            patch("service.urlopen") as open_status,
+            self.assertRaisesRegex(RuntimeError, "readiness timed out"),
+        ):
+            service._wait_for_studio(RunningProcess(), 8791)  # type: ignore[arg-type]
+
+        open_status.assert_not_called()
+
+
 class _StudioFixtureHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         _ = format, args

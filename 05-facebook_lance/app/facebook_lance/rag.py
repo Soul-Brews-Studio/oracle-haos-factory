@@ -11,7 +11,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 from lancedb.pydantic import LanceModel
@@ -124,7 +124,9 @@ def build_retrieval_documents(db_uri: str) -> RetrievalBuildStats:
         )
 
 
-def rag_stats(db_uri: str) -> dict[str, Any]:
+def rag_stats(
+    db_uri: str, *, semantic_generation: str | None = None
+) -> dict[str, Any]:
     """Return aggregate-only state for the current retrieval generation."""
 
     safe_empty = {
@@ -137,30 +139,35 @@ def rag_stats(db_uri: str) -> dict[str, Any]:
     }
     try:
         db = connect_db(db_uri)
-        semantic_generation = _current_semantic_generation(db_uri, db)
+        if semantic_generation is None:
+            generation = _current_semantic_generation(db_uri, db)
+        else:
+            generation = semantic_generation
+            if not _manifest_generation_matches(db_uri, generation):
+                return safe_empty
+        rows = _published_documents(db, generation)
+        if rows is None:
+            return safe_empty
+        canonical = _canonical_text_rows(db)
+        if not _manifest_generation_matches(db_uri, generation):
+            return safe_empty
     except (FileNotFoundError, RuntimeError):
         return safe_empty
-    canonical = _canonical_text_rows(db)
-    eligible = [row for row in canonical if _has_text(row)]
-    expected = _derive_documents(canonical)
-    rag_generation = _rag_generation(semantic_generation, expected)
-    rows = [
-        {
-            **row,
-            "semantic_generation": semantic_generation,
-            "rag_generation": rag_generation,
-        }
-        for row in expected
-    ]
-    if not _table_matches(db, rows, semantic_generation, rag_generation):
-        return safe_empty
-    stats = _build_stats(
-        canonical, eligible, rows, semantic_generation, rag_generation
+    rag_generation = str(rows[0]["rag_generation"])
+    joined_documents = sum(row["comment_count"] > 0 for row in rows)
+    standalone_documents = sum(
+        row["document_kind"] == "standalone" for row in rows
     )
+    comments_joined = sum(int(row["comment_count"]) for row in rows)
     return {
         "ready": True,
-        **asdict(stats),
-        "documents": stats.documents_written,
+        "records_seen": len(canonical),
+        "eligible_records": sum(_has_text(row) for row in canonical),
+        "documents_written": len(rows),
+        "joined_documents": joined_documents,
+        "standalone_documents": standalone_documents,
+        "comments_joined": comments_joined,
+        "documents": len(rows),
         "joined_post_threads": sum(
             row["document_kind"] in {"post_thread", "group_post_thread"}
             and row["comment_count"] > 0
@@ -171,8 +178,20 @@ def rag_stats(db_uri: str) -> dict[str, Any]:
             and row["root_record_type"] in _COMMENT_TYPES
             for row in rows
         ),
+        "semantic_generation": generation,
+        "rag_generation": rag_generation,
         "join_policy_version": JOIN_POLICY_VERSION,
     }
+
+
+def _manifest_generation_matches(db_uri: str, generation: str) -> bool:
+    try:
+        manifest = _read_generation_manifest(db_uri)
+    except (FileNotFoundError, RuntimeError):
+        return False
+    return bool(
+        manifest is not None and manifest.get("semantic_generation") == generation
+    )
 
 
 def rag_query(
@@ -513,20 +532,55 @@ def _build_stats(
 
 def _validated_documents(db_uri: str, db: Any) -> list[dict[str, Any]]:
     generation = _current_semantic_generation(db_uri, db)
-    canonical = _canonical_text_rows(db)
-    expected = _derive_documents(canonical)
-    rag_generation = _rag_generation(generation, expected)
-    rows = [
-        {
-            **row,
-            "semantic_generation": generation,
-            "rag_generation": rag_generation,
-        }
-        for row in expected
-    ]
-    if not _table_matches(db, rows, generation, rag_generation):
+    rows = _published_documents(db, generation)
+    if rows is None:
         raise FileNotFoundError(RETRIEVAL_DOCUMENTS_TABLE)
     return rows
+
+
+def _published_documents(
+    db: Any, semantic_generation: str
+) -> list[dict[str, Any]] | None:
+    """Validate the published table against its canonical-bound generation."""
+
+    names = set(db.list_tables().tables)
+    if {RECORDS_TABLE, RETRIEVAL_DOCUMENTS_TABLE} - names:
+        return None
+    table = db.open_table(RETRIEVAL_DOCUMENTS_TABLE)
+    if not _table_schema(table).equals(
+        RetrievalDocument.to_arrow_schema(), check_metadata=False
+    ):
+        return None
+    count = table.count_rows()
+    if not count:
+        return None
+    rows = table.search().limit(count).to_arrow().to_pylist()
+    rag_generations = {str(row["rag_generation"]) for row in rows}
+    if (
+        len(rag_generations) != 1
+        or any(
+            row["semantic_generation"] != semantic_generation
+            or row["join_policy_version"] != JOIN_POLICY_VERSION
+            for row in rows
+        )
+    ):
+        return None
+    rag_generation = next(iter(rag_generations))
+    base_rows = [
+        {
+            key: value
+            for key, value in row.items()
+            if key not in {"semantic_generation", "rag_generation"}
+        }
+        for row in rows
+    ]
+    expected_generation = _rag_generation(
+        semantic_generation,
+        sorted(base_rows, key=lambda row: row["document_id"]),
+    )
+    if expected_generation != rag_generation:
+        return None
+    return sorted(rows, key=lambda row: row["document_id"])
 
 
 def _collapse_hits(

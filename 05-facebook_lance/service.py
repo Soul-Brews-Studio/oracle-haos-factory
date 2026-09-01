@@ -17,6 +17,10 @@ from urllib.request import urlopen
 
 MAX_REQUEST_BYTES = 4096
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+STUDIO_HEALTH_TIMEOUT_SECONDS = 5
+STUDIO_READINESS_TIMEOUT_SECONDS = 5
+STUDIO_READINESS_DEADLINE_SECONDS = 90
+STUDIO_READINESS_RETRY_SECONDS = 0.5
 HOP_HEADERS = frozenset(
     {
         "connection",
@@ -109,7 +113,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _health(self) -> None:
         try:
             connection = http.client.HTTPConnection(
-                "127.0.0.1", self.server.studio_port, timeout=2
+                "127.0.0.1",
+                self.server.studio_port,
+                timeout=STUDIO_HEALTH_TIMEOUT_SECONDS,
             )
             connection.request("GET", "/api/status", headers={"Host": "localhost"})
             response = connection.getresponse()
@@ -201,15 +207,24 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 
 def _wait_for_studio(process: subprocess.Popen[bytes], port: int) -> None:
-    for _ in range(60):
+    deadline = time.monotonic() + STUDIO_READINESS_DEADLINE_SECONDS
+    while True:
         if process.poll() is not None:
             raise RuntimeError("Studio exited before readiness")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
-            with urlopen(f"http://127.0.0.1:{port}/api/status", timeout=1) as response:
+            with urlopen(
+                f"http://127.0.0.1:{port}/api/status",
+                timeout=min(STUDIO_READINESS_TIMEOUT_SECONDS, remaining),
+            ) as response:
                 if response.status == 200:
                     return
         except OSError:
-            time.sleep(0.5)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(STUDIO_READINESS_RETRY_SECONDS, remaining))
     raise RuntimeError("Studio readiness timed out")
 
 
