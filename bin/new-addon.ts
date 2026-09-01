@@ -511,7 +511,7 @@ export async function scaffold(args: string[], root = process.cwd()): Promise<st
   return target;
 }
 
-if (import.meta.main) {
+if (import.meta.main && process.env.NODE_ENV !== "test") {
   const args = Bun.argv.slice(2);
   const action = async () => {
     if (args.includes("--check")) {

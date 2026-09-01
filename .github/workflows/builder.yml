@@ -9,6 +9,7 @@ on:
     paths:
       - "01-hello/**"
       - "02-mz_forwarder/**"
+      - "03-kvm_monitor/**"
       - ".github/workflows/builder.yml"
   workflow_dispatch:
 
@@ -31,6 +32,7 @@ jobs:
         addon:
           - { dir: "01-hello", image: "hello" }
           - { dir: "02-mz_forwarder", image: "mz_forwarder" }
+          - { dir: "03-kvm_monitor", image: "kvm_monitor" }
 
     steps:
       - uses: actions/checkout@v4
