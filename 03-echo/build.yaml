@@ -1,0 +1,12 @@
+# The official builder supplies BUILD_FROM per architecture. These tags
+# match the Dockerfile's pinned 3.22 default so local and CI builds do not prove
+# different base generations.
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base:3.22
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.22
+
+# BUILD_ARCH comes from the builder. Overriding it with "{arch}" passes that
+# literal text and makes the Dockerfile reject an apparently unsupported arch.
+labels:
+  org.opencontainers.image.source: https://github.com/Soul-Brews-Studio/oracle-haos-factory
+  org.opencontainers.image.licenses: MIT
