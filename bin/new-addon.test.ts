@@ -6,6 +6,7 @@ import {
   nextDirectoryName,
   parseArguments,
   parseOption,
+  probePublishedImage,
   probeMeaning,
   validateSlug,
   type ScaffoldDefinition,
@@ -107,5 +108,26 @@ describe("new-addon", () => {
     expect(probeMeaning("401")).toBe("private");
     expect(probeMeaning("404")).toBe("missing");
     expect(probeMeaning("500")).toBe("unexpected");
+  });
+
+  test("exchanges a GHCR anonymous token before probing public tags", async () => {
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    const status = await probePublishedImage("amd64-addon-lesson", async (url, init) => {
+      const authorization = new Headers(init?.headers).get("authorization");
+      calls.push({ url, authorization });
+      if (url.startsWith("https://ghcr.io/token?")) {
+        const tokenUrl = new URL(url);
+        expect(tokenUrl.searchParams.get("service")).toBe("ghcr.io");
+        expect(tokenUrl.searchParams.get("scope")).toBe(
+          "repository:soul-brews-studio/amd64-addon-lesson:pull",
+        );
+        return Response.json({ token: "anonymous-token" });
+      }
+      return Response.json({ tags: ["latest"] }, { status: 200 });
+    });
+
+    expect(status).toBe("200");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.authorization).toBe("Bearer anonymous-token");
   });
 });

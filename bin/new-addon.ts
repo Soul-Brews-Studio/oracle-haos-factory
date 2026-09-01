@@ -168,27 +168,42 @@ export function probeMeaning(status: string): string {
   return "unexpected";
 }
 
+type ImageProbeFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+export async function probePublishedImage(
+  image: string,
+  fetcher: ImageProbeFetch = (url, init) => fetch(url, init),
+): Promise<string> {
+  const scope = `repository:${REGISTRY_OWNER}/${image}:pull`;
+  const tokenUrl = new URL("https://ghcr.io/token");
+  tokenUrl.searchParams.set("service", "ghcr.io");
+  tokenUrl.searchParams.set("scope", scope);
+
+  // GHCR challenges even anonymous public pulls with 401. Exchange that
+  // challenge for an anonymous scoped token before deciding package visibility.
+  const tokenResponse = await fetcher(tokenUrl.toString());
+  if (!tokenResponse.ok) return String(tokenResponse.status);
+  const payload = (await tokenResponse.json()) as { token?: unknown };
+  if (typeof payload.token !== "string" || payload.token.length === 0) return "500";
+
+  const tagsUrl = `https://ghcr.io/v2/${REGISTRY_OWNER}/${image}/tags/list`;
+  const tagsResponse = await fetcher(tagsUrl, {
+    headers: { authorization: `Bearer ${payload.token}` },
+  });
+  return String(tagsResponse.status);
+}
+
 export async function checkPublishedImages(slug: string): Promise<boolean> {
   validateSlug(slug);
   let installable = true;
 
   for (const arch of ["amd64", "aarch64"] as const) {
     const image = `${arch}-addon-${slug}`;
-    const url = `https://ghcr.io/v2/${REGISTRY_OWNER}/${image}/tags/list`;
-    // Deliberately curl with no Authorization header: Supervisor is the consumer
-    // and pulls anonymously, so an authenticated developer check proves nothing.
-    const process = Bun.spawn(
-      ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", url],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const [statusText, errorText, exitCode] = await Promise.all([
-      new Response(process.stdout).text(),
-      new Response(process.stderr).text(),
-      process.exited,
-    ]);
-    const status = statusText.trim();
-    if (exitCode !== 0) {
-      console.log(`${arch}: curl-error ${errorText.trim() || `exit ${exitCode}`}`);
+    let status: string;
+    try {
+      status = await probePublishedImage(image);
+    } catch (error) {
+      console.log(`${arch}: probe-error ${error instanceof Error ? error.message : String(error)}`);
       installable = false;
       continue;
     }
