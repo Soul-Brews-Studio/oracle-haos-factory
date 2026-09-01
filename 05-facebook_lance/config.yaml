@@ -1,0 +1,43 @@
+name: "Facebook Lance"
+version: "0.1.0"
+slug: "facebook_lance"
+description: >-
+  Read-only Facebook archive Feed, Chats, semantic search, and topic explorer
+  backed by an Ivy Bridge-safe local LanceDB index.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/05-facebook_lance"
+
+image: "ghcr.io/soul-brews-studio/{arch}-addon-facebook_lance"
+arch:
+  - amd64
+startup: application
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# The public listener is a narrow read-only proxy. Studio itself remains bound
+# to loopback inside the container, preserving its original trust boundary.
+ingress: true
+ingress_port: 8104
+panel_icon: mdi:facebook
+panel_title: "Facebook Lance"
+panel_admin: true
+# No host port is published. Private records are reachable only through the
+# Home Assistant-authenticated, admin-only Ingress route on container port 8104.
+
+# A protected SSH add-on stages the database. Facebook Lance only reads it and
+# cannot mutate or replace files in Home Assistant's shared storage.
+map:
+  - type: share
+    read_only: true
+stage: experimental
+
+options:
+  embed_timeout_seconds: 30
+schema:
+  # Home Assistant requires truly optional schema fields to have no default in
+  # `options`. Leaving both unset disables query embedding; no ONNX is bundled.
+  embed_url: str?
+  embed_token: password?
+  embed_timeout_seconds: int(1,120)
