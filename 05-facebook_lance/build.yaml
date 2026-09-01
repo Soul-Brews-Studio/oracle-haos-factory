@@ -1,7 +1,7 @@
 build_from:
   # lancedb-compat is glibc-only and currently publishes an amd64 wheel. The
   # Debian image is required; Alpine/musl and aarch64 are intentionally absent.
-  amd64: python:3.12-slim-bookworm
+  amd64: docker.io/library/python:3.12-slim-bookworm
 
 labels:
   org.opencontainers.image.source: https://github.com/Soul-Brews-Studio/oracle-haos-factory
