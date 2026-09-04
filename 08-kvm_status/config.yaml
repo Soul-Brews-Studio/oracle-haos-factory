@@ -1,0 +1,55 @@
+name: "Kvm Status"
+version: "0.1.2"
+slug: "kvm_status"
+description: >-
+  Live disk capacity and device health for this Home Assistant OS host — free
+  space, memory, CPU, board and kernel, and the state of every installed add-on.
+  Every figure is read from the Supervisor API on each poll; nothing is estimated.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/08-kvm_status"
+
+# A published image makes installation a pull instead of building on the HAOS
+# machine. It also moves failures into CI, where they cannot masquerade as a
+# successful update that quietly leaves an old image running.
+image: "ghcr.io/soul-brews-studio/{arch}-addon-kvm_status"
+arch:
+  - amd64
+  - aarch64
+startup: application
+# Reboots must restore the service without a human reopening the add-on page.
+boot: auto
+# Home Assistant base images already own PID 1 through s6-overlay.
+init: false
+hassio_api: true
+homeassistant_api: false
+host_network: false
+
+# Ingress serves a browser with an HA session; API consumers need a stable port
+# because they cannot authenticate to or address an ingress URL.
+ingress: true
+ingress_port: 8109
+panel_icon: mdi:harddisk
+panel_title: "Kvm Status"
+panel_admin: false
+ports:
+  8109/tcp: 8109
+ports_description:
+  8109/tcp: "Web endpoint and /api/health for external probes"
+
+# /data is the only add-on path Supervisor persists across updates and includes
+# in Home Assistant backups, even when this first scaffold stores nothing yet.
+map:
+  - data:rw
+stage: experimental
+
+# Generated from the same option definitions as run.sh and server.ts. Adding an
+# option to only this surface recreates Trap 6 and is intentionally unsupported.
+options:
+  refresh_seconds: 5
+  disk_warn_percent: 80
+  disk_critical_percent: 90
+schema:
+  # String options use str. An empty default under url? fails validation before
+  # the container exists, so the add-on log is empty and points at the wrong layer.
+  refresh_seconds: int
+  disk_warn_percent: int
+  disk_critical_percent: int

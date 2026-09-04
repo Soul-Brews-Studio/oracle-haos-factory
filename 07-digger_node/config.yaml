@@ -1,0 +1,67 @@
+name: "Digger Node"
+version: "0.1.0"
+slug: "digger_node"
+description: >-
+  digger-node on your own disk: a Drupal-shaped content store (nodes, vocabularies,
+  terms) with trigram full-text search, 19 MCP tools, and OAuth for claude.ai —
+  the same app that runs on Cloudflare, storing to SQLite under /data instead of D1.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/07-digger_node"
+
+# A published image makes installation a pull instead of building on the HAOS
+# machine. It also moves failures into CI, where they cannot masquerade as a
+# successful update that quietly leaves an old image running.
+image: "ghcr.io/soul-brews-studio/{arch}-addon-digger_node"
+arch:
+  - amd64
+  - aarch64
+startup: application
+# Reboots must restore the service without a human reopening the add-on page.
+boot: auto
+# Home Assistant base images already own PID 1 through s6-overlay.
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# Ingress serves a browser with an HA session; API consumers need a stable port
+# because they cannot authenticate to or address an ingress URL.
+ingress: true
+ingress_port: 8108
+panel_icon: mdi:pickaxe
+panel_title: "Digger Node"
+panel_admin: false
+ports:
+  8108/tcp: 8108
+ports_description:
+  8108/tcp: "Web UI, REST API and the MCP endpoint. Ingress cannot carry MCP —\n    an MCP client cannot authenticate to an ingress URL — so this port is how\n    Claude Code and claude.ai reach the node. It is guarded by owner_passphrase\n    and api_token, NOT by Home Assistant's session."
+
+# /data is the only add-on path Supervisor persists across updates and includes
+# in Home Assistant backups, even when this first scaffold stores nothing yet.
+map:
+  - data:rw
+stage: experimental
+
+# Generated from the same option definitions as run.sh and server.ts. Adding an
+# option to only this surface recreates Trap 6 and is intentionally unsupported.
+options:
+  instance_name: "digger-node"
+  # Empty on purpose. A default passphrase shipped in a public repository is a
+  # published credential: every install would share it, and most would never
+  # change it. Empty means the node starts OPEN on its mapped port and run.sh
+  # says so loudly in the log, which is a visible problem rather than a silent
+  # one. Set this before exposing the port anywhere.
+  #
+  # Kept as `str` rather than `password?`: an optional key shipped with an ""
+  # default can fail Supervisor's options validation BEFORE the container is
+  # created, and the add-on then never starts with an EMPTY log — a failure that
+  # points at the wrong layer. `str` accepts "" and is already proven here.
+  owner_passphrase: ""
+  api_token: ""
+  rate_limit: "on"
+schema:
+  # String options use str. An empty default under url? fails validation before
+  # the container exists, so the add-on log is empty and points at the wrong layer.
+  instance_name: str
+  owner_passphrase: str
+  api_token: str
+  rate_limit: str

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KVM Status</title>
+<style>
+  :root {
+    --ground:#12151a; --panel:#1a1f27; --line:#2a323d; --ink:#e8edf4; --dim:#93a1b3;
+    --ok:#5ec98d; --warn:#e0b458; --crit:#e5705f; --accent:#6aa9e9;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --ground:#f4f6fa; --panel:#fff; --line:#dde3ec; --ink:#18202b;
+            --dim:#5d6b7d; --ok:#1f8a53; --warn:#9a6b12; --crit:#b4382a; --accent:#2b6cb0;
+            color-scheme: light; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; padding:20px; }
+  h1 { font-size:1.05rem; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:.82rem; margin-bottom:18px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 12px; font-weight:600; }
+  .big { font-size:1.9rem; font-weight:650; letter-spacing:-.02em; line-height:1.1; }
+  .unit { font-size:.85rem; color:var(--dim); font-weight:400; }
+  .bar { height:9px; border-radius:5px; background:var(--line); overflow:hidden; margin:12px 0 8px; }
+  .bar > i { display:block; height:100%; border-radius:5px; transition:width .4s ease; }
+  .ok > i { background:var(--ok); } .warn > i { background:var(--warn); } .crit > i { background:var(--crit); }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  td { padding:5px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { color:var(--dim); width:44%; }
+  tr:last-child td { border-bottom:0; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:.72rem; font-weight:600; }
+  .p-ok { background:color-mix(in oklab,var(--ok) 22%,transparent); color:var(--ok); }
+  .p-off { background:color-mix(in oklab,var(--dim) 20%,transparent); color:var(--dim); }
+  .p-crit { background:color-mix(in oklab,var(--crit) 22%,transparent); color:var(--crit); }
+  .err { background:color-mix(in oklab,var(--crit) 12%,var(--panel)); border:1px solid color-mix(in oklab,var(--crit) 45%,var(--line)); color:var(--crit); padding:12px 14px; border-radius:10px; margin-bottom:14px; font-size:.86rem; }
+  .foot { margin-top:16px; color:var(--dim); font-size:.75rem; }
+  .scroll { max-height:270px; overflow:auto; }
+</style></head>
+<body><div id="root"></div>
+<script src="__BASE__/vendor/react.js"></script>
+<script src="__BASE__/vendor/react-dom.js"></script>
+<script src="__BASE__/vendor/htm.js"></script>
+<script>
+const { createElement, useState, useEffect } = React;
+const html = htm.bind(createElement);
+const BASE = "__BASE__";
+const REFRESH = Number("__REFRESH_MS__");
+
+// A missing number renders as an em dash. Never as 0 — on a capacity page a
+// fake zero is indistinguishable from "plenty of room".
+const n = (v, digits) => (v === null || v === undefined ? "—" : Number(v).toFixed(digits ?? 1));
+const gb = (bytes) => (bytes === null || bytes === undefined ? "—" : (bytes / 1073741824).toFixed(2));
+const dur = (s) => {
+  if (s === null || s === undefined) return "—";
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m + "m";
+};
+
+function Row({ k, v }) { return html`<tr><td>${k}</td><td>${v ?? "—"}</td></tr>`; }
+
+function App() {
+  const [s, setS] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const r = await fetch(BASE + "/api/status");
+        const d = await r.json();
+        if (!alive) return;
+        if (d.ok) { setS(d); setErr(null); } else { setErr(d.error || "unavailable"); }
+      } catch (e) { if (alive) setErr(String(e && e.message || e)); }
+    };
+    tick();
+    const id = setInterval(tick, REFRESH);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  if (err && !s) return html`<div class="err">Cannot reach Supervisor: ${err}</div>`;
+  if (!s) return html`<div class="sub">Reading the host…</div>`;
+
+  const d = s.disk, pct = d.used_percent;
+  const level = pct === null ? "ok" : pct >= s.thresholds.critical ? "crit" : pct >= s.thresholds.warn ? "warn" : "ok";
+
+  return html`
+    <h1>${s.host.hostname || "this host"}</h1>
+    <div class="sub">
+      ${s.host.operating_system || ""} · ${s.host.virtualization || s.host.chassis || ""}
+      · up ${dur(s.host.uptime_seconds)} · refreshed ${new Date(s.at).toLocaleTimeString()}
+    </div>
+    ${err && html`<div class="err">Last poll failed: ${err} — figures below are the last good read.</div>`}
+    <div class="grid">
+      <div class="card">
+        <h2>Disk</h2>
+        <div class="big">${n(pct)}<span class="unit">% used</span></div>
+        <div class="bar ${level}"><i style=${{ width: (pct === null ? 0 : Math.min(100, pct)) + "%" }}></i></div>
+        <table>
+          <${Row} k="Free" v=${n(d.free_gb) + " GB"} />
+          <${Row} k="Used" v=${n(d.used_gb) + " GB"} />
+          <${Row} k="Total" v=${n(d.total_gb) + " GB"} />
+          <${Row} k="Data disk" v=${d.data_disk} />
+          <${Row} k="Life used" v=${d.life_time === null ? "not reported" : d.life_time + "%"} />
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Memory &amp; load (host)</h2>
+        <div class="big">${n(s.memory && s.memory.percent)}<span class="unit">% memory</span></div>
+        <div class="bar ${s.memory && s.memory.percent >= 90 ? "crit" : s.memory && s.memory.percent >= 75 ? "warn" : "ok"}">
+          <i style=${{ width: ((s.memory && s.memory.percent) || 0) + "%" }}></i>
+        </div>
+        <table>
+          <${Row} k="Used" v=${gb(s.memory && s.memory.used_bytes) + " GB"} />
+          <${Row} k="Available" v=${gb(s.memory && s.memory.available_bytes) + " GB"} />
+          <${Row} k="Total" v=${gb(s.memory && s.memory.total_bytes) + " GB"} />
+          <${Row} k="Load 1 / 5 / 15" v=${s.load ? n(s.load.one, 2) + " / " + n(s.load.five, 2) + " / " + n(s.load.fifteen, 2) : "—"} />
+          <${Row} k="Cores" v=${s.load && s.load.cpus} />
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Device</h2>
+        <table>
+          <${Row} k="Board" v=${s.host.board} />
+          <${Row} k="Kernel" v=${s.host.kernel} />
+          <${Row} k="OS" v=${s.host.os_version + (s.host.os_update_available ? " → " + s.host.os_version_latest : "")} />
+          <${Row} k="Supervisor" v=${s.supervisor.version} />
+          <${Row} k="Arch / channel" v=${(s.supervisor.arch || "—") + " · " + (s.supervisor.channel || "—")} />
+          <${Row} k="Healthy" v=${html`<span class=${"pill " + (s.supervisor.healthy ? "p-ok" : "p-crit")}>${s.supervisor.healthy ? "yes" : "no"}</span>`} />
+          <${Row} k="Supported" v=${html`<span class=${"pill " + (s.supervisor.supported ? "p-ok" : "p-crit")}>${s.supervisor.supported ? "yes" : "no"}</span>`} />
+          <${Row} k="Timezone" v=${s.host.timezone} />
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Add-ons (${s.addons.length})</h2>
+        <div class="scroll"><table>
+          ${s.addons.map((a) => html`
+            <tr key=${a.slug}>
+              <td>${a.name}${a.update_available ? " ↑" : ""}</td>
+              <td><span class=${"pill " + (a.state === "started" ? "p-ok" : "p-off")}>${a.state}</span></td>
+            </tr>`)}
+        </table></div>
+      </div>
+    </div>
+    <div class="foot">Every figure is read live from the Supervisor API. A value the host does not report shows as “—”, never as zero.</div>
+  `;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+</script></body></html>
