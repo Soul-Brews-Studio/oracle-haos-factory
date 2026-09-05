@@ -14,6 +14,7 @@ COPY --from=app package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile
 COPY --from=app src/ ./src/
 COPY --from=app test/ ./test/
+COPY --from=app migrations/ ./migrations/
 RUN bun test ./test \
  && bun run typecheck \
  && bun install --production --frozen-lockfile
