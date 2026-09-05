@@ -55,6 +55,7 @@ COPY --from=uv-bin /uv /usr/local/bin/uv
 COPY --from=app pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY --from=app python/ ./python/
+COPY --from=app migrations/ ./migrations/
 COPY --from=model-build /opt/models/ /opt/models/
 RUN test -n "$(find /opt/models -mindepth 1 -print -quit)"
 
