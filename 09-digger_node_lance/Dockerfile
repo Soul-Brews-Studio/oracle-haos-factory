@@ -193,7 +193,7 @@ COPY --from=python-build /opt/models/ /opt/models/
 COPY --from=python-test /python-validation-status /python-validation-status
 COPY --from=pocketbase-build /opt/pocketbase/pocketbase ./pocketbase/pocketbase
 COPY --from=pocketbase-test /pocketbase-tests-passed /pocketbase-tests-passed
-COPY read-option.py bootstrap-pocketbase.py ./addon/
+COPY read-option.py bootstrap-pocketbase.py redact-pocketbase-log.py ./addon/
 COPY run.sh /run.sh
 RUN chmod 0755 /run.sh ./addon/*.py ./pocketbase/pocketbase \
  && test -x /usr/local/bin/bun \

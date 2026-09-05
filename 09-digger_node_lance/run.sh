@@ -162,7 +162,9 @@ start_child PocketBase \
   --http=127.0.0.1:8090 \
   --dir="${PB_DATA_DIR}" \
   --hooksDir="${APP_DIR}/pocketbase/pb_hooks" \
-  --migrationsDir="${APP_DIR}/pocketbase/pb_migrations"
+  --migrationsDir="${APP_DIR}/pocketbase/pb_migrations" \
+  > >(python3 -u "${ADDON_SUPPORT_DIR}/redact-pocketbase-log.py") \
+  2> >(python3 -u "${ADDON_SUPPORT_DIR}/redact-pocketbase-log.py" >&2)
 pb_pid="${child_pids[-1]}"
 wait_for_url PocketBase "${pb_pid}" "${PB_URL}/api/health" 60
 

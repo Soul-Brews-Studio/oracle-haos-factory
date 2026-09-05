@@ -14,7 +14,16 @@ PYTHONPYCACHEPREFIX="${PYCACHE}" python3 -m py_compile \
   "${HERE}/prepare-pocketbase.py" \
   "${HERE}/verify-pocketbase-assets.py" \
   "${HERE}/read-option.py" \
-  "${HERE}/bootstrap-pocketbase.py"
+  "${HERE}/bootstrap-pocketbase.py" \
+  "${HERE}/redact-pocketbase-log.py"
+
+pb_log='Open http://127.0.0.1:8090/_/#/pbinstal/secret.jwt.value now'
+redacted_log="$(printf '%s\n' "${pb_log}" | python3 "${HERE}/redact-pocketbase-log.py")"
+printf '%s\n' "${redacted_log}" | grep -Fq '/_/#/pbinstal/[REDACTED]'
+if printf '%s\n' "${redacted_log}" | grep -Fq 'secret.jwt.value'; then
+  echo 'PocketBase bootstrap credential was not redacted' >&2
+  exit 1
+fi
 
 ruby -e '
   require "yaml"
