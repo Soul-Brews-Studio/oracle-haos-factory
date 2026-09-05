@@ -32,7 +32,7 @@ docker buildx build --load --platform linux/amd64 \
   --build-context "app=$APP" \
   --build-arg "APP_SOURCE_SHA=$SHA" \
   --build-arg BUILD_VERSION=0.1.0 \
-  -t "digger-node-lance:0.1.0-${SHA:0:12}" \
+  -t "digger-node-lance:0.1.0-amd64-${SHA:0:12}" \
   09-digger_node_lance
 ```
 
@@ -66,7 +66,7 @@ docker run --rm --name digger-node-lance-local \
   -p 18111:8111 \
   -v /tmp/digger-node-lance-data:/data \
   -v /tmp/digger-node-lance-options.json:/data/options.json:ro \
-  "digger-node-lance:0.1.0-<source-sha>"
+  "digger-node-lance:0.1.0-<platform>-<source-sha>"
 ```
 
 From another terminal:

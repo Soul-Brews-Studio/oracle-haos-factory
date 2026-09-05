@@ -92,9 +92,24 @@ declare -a child_names=()
 
 stop_children() {
   trap - INT TERM HUP EXIT
-  local pid
+  local pid alive
   for pid in "${child_pids[@]}"; do
     kill -TERM "${pid}" 2>/dev/null || true
+  done
+  local deadline=$((SECONDS + 10))
+  while (( SECONDS < deadline )); do
+    alive=0
+    for pid in "${child_pids[@]}"; do
+      kill -0 "${pid}" 2>/dev/null && alive=1
+    done
+    (( alive == 0 )) && break
+    sleep 0.2
+  done
+  for pid in "${child_pids[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      echo "child ${pid} did not stop within 10s; sending KILL" >&2
+      kill -KILL "${pid}" 2>/dev/null || true
+    fi
   done
   for pid in "${child_pids[@]}"; do
     wait "${pid}" 2>/dev/null || true
@@ -179,6 +194,7 @@ from urllib.request import urlopen
 
 with urlopen("http://127.0.0.1:8111/health", timeout=5) as response:
     health = json.load(response)
+assert health.get("ok") is True, health
 assert health.get("driver") == "lancedb", health
 assert health.get("tools") == 19, health
 assert health.get("embedder") is not None, health

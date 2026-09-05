@@ -17,7 +17,10 @@ fi
 
 APP_SOURCE_SHA="$(git -C "${APP_WORKTREE}" rev-parse HEAD)"
 readonly APP_SOURCE_SHA
-readonly TAG="digger-node-lance:0.1.0-${APP_SOURCE_SHA:0:12}"
+PLATFORM_TAG="${PLATFORM#linux/}"
+PLATFORM_TAG="${PLATFORM_TAG//\//-}"
+readonly PLATFORM_TAG
+readonly TAG="digger-node-lance:0.1.0-${PLATFORM_TAG}-${APP_SOURCE_SHA:0:12}"
 printf 'Building %s from digger-node %s for %s\n' "${TAG}" "${APP_SOURCE_SHA}" "${PLATFORM}"
 
 exec docker buildx build \
