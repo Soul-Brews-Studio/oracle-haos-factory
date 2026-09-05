@@ -148,7 +148,6 @@ wait_for_url PocketBase "${pb_pid}" "${PB_URL}/api/health" 60
 # loopback JSON body and process environment, never argv or logs.
 PB_SUPERUSER_PASSWORD="${PB_SUPERUSER_PASSWORD}" \
   python3 "${ADDON_SUPPORT_DIR}/bootstrap-pocketbase.py"
-unset PB_SUPERUSER_PASSWORD
 
 echo "starting Python Lance service privately on 127.0.0.1:8110"
 start_child LanceDB python3 -m digger_lance.server
@@ -156,8 +155,15 @@ lance_pid="${child_pids[-1]}"
 wait_for_url LanceDB "${lance_pid}" "${LANCE_URL}/health" 180
 
 echo "starting Digger Node Lance on 0.0.0.0:8111"
-start_child Bun bun "${APP_DIR}/src/lance-server.ts"
+start_bun() {
+  # The Bun bootstrap independently confirms the record exists. Give only Bun
+  # this initial credential; PB and Python never inherit it and it is not argv.
+  export PB_SUPERUSER_PASSWORD
+  exec bun "${APP_DIR}/src/lance-server.ts"
+}
+start_child Bun start_bun
 bun_pid="${child_pids[-1]}"
+unset PB_SUPERUSER_PASSWORD
 wait_for_url Bun "${bun_pid}" "${PUBLIC_URL_INTERNAL}/health" 60
 
 python3 - <<'PY'
