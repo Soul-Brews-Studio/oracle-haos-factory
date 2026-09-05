@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch PocketBase's embedded admin UI to use Digger's isolated auth key."""
+"""Patch PocketBase's embedded admin UI to use Digger's namespaced auth key."""
 
 from __future__ import annotations
 
