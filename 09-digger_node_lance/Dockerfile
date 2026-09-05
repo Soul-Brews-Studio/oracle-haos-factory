@@ -20,6 +20,25 @@ RUN bun test ./test \
 
 FROM ${UV_IMAGE} AS uv-bin
 
+# Model weights are architecture-independent. Populate the immutable cache on
+# the native build platform so cross-building amd64 on an arm64 workstation
+# does not execute amd64 ONNX Runtime under QEMU (which exits 132).
+FROM --platform=${BUILDPLATFORM} ${BUILD_FROM} AS model-build
+ENV UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/python \
+    MODEL_CACHE=/opt/models \
+    FASTEMBED_CACHE_PATH=/opt/models
+WORKDIR /app
+COPY --from=uv-bin /uv /usr/local/bin/uv
+COPY --from=app pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY --from=app python/ ./python/
+RUN .venv/bin/python -m digger_lance.download_model \
+ && test -n "$(find /opt/models -mindepth 1 -print -quit)"
+
 FROM ${BUILD_FROM} AS python-build
 ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -33,9 +52,12 @@ COPY --from=uv-bin /uv /usr/local/bin/uv
 COPY --from=app pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY --from=app python/ ./python/
+COPY --from=model-build /opt/models/ /opt/models/
+RUN test -n "$(find /opt/models -mindepth 1 -print -quit)"
+
+FROM python-build AS python-test
 RUN .venv/bin/python -m unittest discover -s python/tests -v \
- && .venv/bin/python -m digger_lance.download_model \
- && test -n "$(find /opt/models -mindepth 1 -print -quit)"
+ && touch /python-tests-passed
 
 FROM ${BUILD_FROM} AS pocketbase-build
 ARG PB_VERSION=0.29.3
@@ -121,6 +143,7 @@ COPY --from=app pocketbase/pb_hooks/ ./pocketbase/pb_hooks/
 COPY --from=app pocketbase/pb_migrations/ ./pocketbase/pb_migrations/
 COPY --from=python-build /app/.venv/ ./.venv/
 COPY --from=python-build /opt/models/ /opt/models/
+COPY --from=python-test /python-tests-passed /python-tests-passed
 COPY --from=pocketbase-build /opt/pocketbase/pocketbase ./pocketbase/pocketbase
 COPY read-option.py bootstrap-pocketbase.py ./addon/
 COPY run.sh /run.sh
