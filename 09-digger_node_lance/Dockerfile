@@ -105,6 +105,41 @@ RUN set -eu; \
     wait "$pid" || true; \
     trap - EXIT
 
+FROM pocketbase-build AS pocketbase-test
+WORKDIR /app
+ENV PYTHONPATH=/app/python \
+    PATH=/app/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+    DIGGER_TEST_MODE=1 \
+    DIGGER_INTERNAL_TOKEN=test-internal-token \
+    OWNER_PASSPHRASE=open-sesame-please \
+    PB_OWNER_EMAIL=owner@digger.invalid \
+    PB_SUPERUSER_EMAIL=admin@digger.invalid \
+    POCKETBASE_TEST_URL=http://127.0.0.1:18091
+COPY --from=app pocketbase/pb_hooks/ /app/pocketbase/pb_hooks/
+COPY --from=app pocketbase/pb_migrations/ /app/pocketbase/pb_migrations/
+COPY --from=app python/ /app/python/
+COPY --from=python-build /app/.venv/ /app/.venv/
+RUN set -eu; \
+    /opt/pocketbase/pocketbase serve \
+      --http=127.0.0.1:18091 \
+      --dir=/tmp/pb-integration \
+      --hooksDir=/app/pocketbase/pb_hooks \
+      --migrationsDir=/app/pocketbase/pb_migrations >/tmp/pb-integration.log 2>&1 & \
+    pid=$!; \
+    trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT; \
+    ready=0; \
+    for _ in $(seq 1 30); do \
+      if curl -fsS http://127.0.0.1:18091/api/health >/dev/null 2>&1; then ready=1; break; fi; \
+      kill -0 "$pid" 2>/dev/null || { cat /tmp/pb-integration.log >&2; exit 1; }; \
+      sleep 1; \
+    done; \
+    test "$ready" = 1; \
+    .venv/bin/python -m unittest discover -v -s python/tests -p test_pocketbase_backend.py; \
+    touch /pocketbase-tests-passed; \
+    kill "$pid"; \
+    wait "$pid" || true; \
+    trap - EXIT
+
 FROM ${BUILD_FROM}
 ARG BUILD_VERSION=0.1.0
 ARG BUILD_ARCH=amd64
@@ -147,6 +182,7 @@ COPY --from=python-build /app/.venv/ ./.venv/
 COPY --from=python-build /opt/models/ /opt/models/
 COPY --from=python-test /python-tests-passed /python-tests-passed
 COPY --from=pocketbase-build /opt/pocketbase/pocketbase ./pocketbase/pocketbase
+COPY --from=pocketbase-test /pocketbase-tests-passed /pocketbase-tests-passed
 COPY read-option.py bootstrap-pocketbase.py ./addon/
 COPY run.sh /run.sh
 RUN chmod 0755 /run.sh ./addon/*.py ./pocketbase/pocketbase \
