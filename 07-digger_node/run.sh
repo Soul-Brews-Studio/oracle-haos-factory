@@ -34,6 +34,13 @@ AUTO_LOGIN="$(bashio::config 'auto_login')"
 [ "${AUTO_LOGIN}" = "null" ] && AUTO_LOGIN='true'
 export INGRESS_AUTO_LOGIN="${AUTO_LOGIN}"
 
+PUBLIC_URL="$(bashio::config 'public_url')"
+[ "${PUBLIC_URL}" = "null" ] && PUBLIC_URL=''
+export PUBLIC_URL
+if [ -n "${PUBLIC_URL}" ]; then
+  bashio::log.info "public_url=${PUBLIC_URL} — OAuth metadata will advertise this origin"
+fi
+
 export PORT=8108
 
 # The corpus lives on /data because that is the only add-on path Supervisor

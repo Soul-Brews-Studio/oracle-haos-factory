@@ -1,5 +1,5 @@
 name: "Digger Node"
-version: "0.3.0"
+version: "0.4.0"
 slug: "digger_node"
 description: >-
   digger-node on your own disk: a Drupal-shaped content store (nodes, vocabularies,
@@ -63,6 +63,19 @@ options:
   # check requires BOTH the ingress header and a source address on the internal
   # hassio bridge, so reaching the port from the LAN or the VPN is never enough.
   auto_login: true
+  # The public origin this node is reachable at, e.g.
+  # https://digger-node.buildwithoracle.com — set ONLY when the add-on is
+  # published through a tunnel and claude.ai needs absolute OAuth URLs.
+  #
+  # It is not cosmetic. OAuth's `issuer` must equal the origin the client
+  # actually reached, byte for byte; behind a proxy that rewrites Host the app
+  # would otherwise advertise the internal origin, and the mismatch fails
+  # SILENTLY and only for OAuth clients — the browser and bearer paths keep
+  # working, so it looks like "claude.ai is broken" rather than a config error.
+  #
+  # Blank derives every URL from the incoming request, which is correct for the
+  # LAN, for ingress, and for NetBird.
+  public_url: ""
 schema:
   # String options use str. An empty default under url? fails validation before
   # the container exists, so the add-on log is empty and points at the wrong layer.
@@ -71,3 +84,4 @@ schema:
   api_token: str
   rate_limit: str
   auto_login: bool
+  public_url: str
