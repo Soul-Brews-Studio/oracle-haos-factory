@@ -56,4 +56,22 @@ test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" instance_name fall
 test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" pb_auto_login false)" = true
 test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" missing fallback)" = fallback
 
+RUN_DATA="$(mktemp -d /tmp/digger-run-data.XXXXXX)"
+APP_DIR=/app \
+ADDON_SUPPORT_DIR="${HERE}" \
+DATA_DIR="${RUN_DATA}" \
+OPTIONS_FILE="${OPTIONS_FIXTURE}" \
+DRY_RUN=1 \
+  "${HERE}/run.sh" >/dev/null
+python3 - "${RUN_DATA}/digger_internal_token" "${RUN_DATA}/pb_superuser_password" <<'PY'
+import stat
+import sys
+from pathlib import Path
+
+for name in sys.argv[1:]:
+    path = Path(name)
+    assert path.read_text(encoding="utf-8").strip(), f"empty secret: {path.name}"
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600, f"wrong mode: {path.name}"
+PY
+
 echo "09-digger_node_lance packaging checks passed"
