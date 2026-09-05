@@ -65,6 +65,7 @@ RUN set -eu; \
 # Checking strings in the executable is not enough: prove the patched key is
 # what a real PocketBase process serves from its embedded admin assets.
 RUN set -eu; \
+    /opt/pocketbase/pocketbase superuser upsert admin@build.invalid build-proof-password --dir=/tmp/pb-proof >/dev/null; \
     /opt/pocketbase/pocketbase serve --http=127.0.0.1:18090 --dir=/tmp/pb-proof >/tmp/pb-proof.log 2>&1 & \
     pid=$!; \
     trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT; \
