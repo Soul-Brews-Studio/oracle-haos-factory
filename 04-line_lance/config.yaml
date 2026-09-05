@@ -1,0 +1,32 @@
+name: "LINE Lance"
+version: "0.3.0"
+slug: "line_lance"
+description: >-
+  Node 24 Elysia gateway, React archive UI, and encrypted local bot manager
+  backed by the loopback-only Python LanceDB service.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/04-line_lance"
+
+arch:
+  - amd64
+startup: application
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# Admin-only HA Ingress reaches the Node gateway. Python listens only inside the
+# container on 127.0.0.1:4133; no direct host or public route is created.
+ingress: true
+ingress_port: 8103
+panel_icon: mdi:database-search
+panel_title: "LINE Lance"
+panel_admin: true
+
+# Keep the private archive in HA's shared storage so the protected SSH add-on
+# can stage it without weakening Supervisor protection or baking data into an
+# image. This app is the only add-on that writes its dedicated subdirectory.
+map:
+  - type: share
+    read_only: false
+stage: experimental

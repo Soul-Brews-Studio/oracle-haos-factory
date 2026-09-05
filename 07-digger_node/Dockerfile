@@ -19,7 +19,7 @@ ARG DIGGER_NODE_REPO="https://github.com/Soul-Brews-Studio/digger-node.git"
 # The FULL 40-character SHA, and that is not cosmetic: GitHub refuses
 # `git fetch origin <abbreviated-sha>` with a bare exit 128 and no explanation.
 # Measured here — the first build of this add-on died exactly that way.
-ARG DIGGER_NODE_REF="a29df72d638cefe73ba3d2f7cf2044310ced9950"
+ARG DIGGER_NODE_REF="4b1f0f09ee46a335a16baf6d0f372503fad7f1d5"
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
@@ -46,7 +46,17 @@ WORKDIR /app
 # Fetch exactly one commit rather than cloning history — the image needs the
 # tree, not the log. `git -c advice...` keeps the detached-HEAD notice out of
 # build output where it reads as a warning about something being wrong.
-RUN git init -q . \
+# BUILD_VERSION is in the cache key on purpose.
+#
+# Changing DIGGER_NODE_REF alone did NOT invalidate this layer: three
+# consecutive add-on versions built in ~50s each, reported "Build done" and
+# "successfully updated", and every one of them kept serving the application
+# from the FIRST build. Supervisor passes --build-arg BUILD_VERSION and nothing
+# else that varies, so naming it here is what ties "bump the add-on version" to
+# "actually re-fetch the app" — which is the rule the comment above already
+# stated and the build was quietly ignoring.
+RUN echo "addon ${BUILD_VERSION} wants digger-node ${DIGGER_NODE_REF}" \
+ && git init -q . \
  && git remote add origin "${DIGGER_NODE_REPO}" \
  && git fetch --depth 1 origin "${DIGGER_NODE_REF}" \
  && git -c advice.detachedHead=false checkout -q FETCH_HEAD \

@@ -1,5 +1,5 @@
 name: "Digger Node"
-version: "0.1.0"
+version: "0.2.3"
 slug: "digger_node"
 description: >-
   digger-node on your own disk: a Drupal-shaped content store (nodes, vocabularies,
@@ -58,6 +58,11 @@ options:
   owner_passphrase: ""
   api_token: ""
   rate_limit: "on"
+  # Opening the sidebar panel signs you in, because Home Assistant already
+  # asked who you are. Requests that arrive on port 8108 are unaffected: the
+  # check requires BOTH the ingress header and a source address on the internal
+  # hassio bridge, so reaching the port from the LAN or the VPN is never enough.
+  auto_login: true
 schema:
   # String options use str. An empty default under url? fails validation before
   # the container exists, so the add-on log is empty and points at the wrong layer.
@@ -65,3 +70,4 @@ schema:
   owner_passphrase: str
   api_token: str
   rate_limit: str
+  auto_login: bool

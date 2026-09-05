@@ -1,0 +1,22 @@
+{
+  "name": "line-lance-gateway",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@elysia/node": "1.4.6",
+    "@elysia/openapi": "1.4.15",
+    "elysia": "1.4.30"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3"
+  }
+}

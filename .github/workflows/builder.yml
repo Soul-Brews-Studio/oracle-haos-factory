@@ -10,6 +10,8 @@ on:
       - "01-hello/**"
       - "02-mz_forwarder/**"
       - "03-kvm_monitor/**"
+      - "07-digger_node/**"
+      - "08-kvm_status/**"
       - ".github/workflows/builder.yml"
   workflow_dispatch:
 
@@ -33,6 +35,8 @@ jobs:
           - { dir: "01-hello", image: "hello" }
           - { dir: "02-mz_forwarder", image: "mz_forwarder" }
           - { dir: "03-kvm_monitor", image: "kvm_monitor" }
+          - { dir: "07-digger_node", image: "digger_node" }
+          - { dir: "08-kvm_status", image: "kvm_status" }
 
     steps:
       - uses: actions/checkout@v4

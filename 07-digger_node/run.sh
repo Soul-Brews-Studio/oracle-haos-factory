@@ -30,6 +30,10 @@ RATE_LIMIT="$(bashio::config 'rate_limit')"
 [ "${RATE_LIMIT}" = "null" ] && RATE_LIMIT='on'
 export RATE_LIMIT
 
+AUTO_LOGIN="$(bashio::config 'auto_login')"
+[ "${AUTO_LOGIN}" = "null" ] && AUTO_LOGIN='true'
+export INGRESS_AUTO_LOGIN="${AUTO_LOGIN}"
+
 export PORT=8108
 
 # The corpus lives on /data because that is the only add-on path Supervisor
@@ -51,6 +55,10 @@ if [ -z "${OWNER_PASSPHRASE}" ] && [ -z "${API_TOKEN}" ]; then
   # Ingress still puts Home Assistant's own login in front, but the mapped port
   # does not. Saying so is better than a silently open corpus.
   bashio::log.warning "no owner_passphrase and no api_token: this node is OPEN on port 8108"
+fi
+
+if [ "${INGRESS_AUTO_LOGIN}" = "true" ]; then
+  bashio::log.info "auto_login on — the sidebar signs in via Home Assistant; port 8108 still requires a credential"
 fi
 
 bashio::log.info "Digger Node starting on port 8108"

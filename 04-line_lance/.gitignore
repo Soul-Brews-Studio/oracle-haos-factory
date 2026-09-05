@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# Private archive mounts and transfer artifacts must never enter this package.
+/.private-share/
+*.tgz
+frontend/dist/
+frontend/node_modules/
+gateway/dist/
+gateway/node_modules/
