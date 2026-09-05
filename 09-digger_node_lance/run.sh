@@ -72,6 +72,13 @@ fi
 export DIGGER_INTERNAL_TOKEN
 unset CONFIGURED_PB_PASSWORD
 
+if [[ -z "${OWNER_PASSPHRASE}" && -z "${API_TOKEN}" ]]; then
+  echo "WARNING: no owner_passphrase and no api_token; mapped port 8111 is open" >&2
+fi
+if [[ "${PB_AUTO_LOGIN}" == "true" && -z "${PB_ADMIN_HA_USER_IDS}" ]]; then
+  echo "WARNING: pb_auto_login is enabled but the HA user-ID allowlist is empty; admin bootstrap denies everyone" >&2
+fi
+
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   printf '%s\n' \
     "PocketBase: 127.0.0.1:8090 data=${PB_DATA_DIR}" \

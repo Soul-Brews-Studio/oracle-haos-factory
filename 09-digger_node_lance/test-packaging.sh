@@ -53,7 +53,7 @@ if grep -Fq '__pb_superuser_auth__' "${PATCH_FIXTURE}"; then
 fi
 
 OPTIONS_FIXTURE="$(mktemp /tmp/digger-options.XXXXXX)"
-printf '%s\n' '{"instance_name":"fixture","pb_auto_login":true}' >"${OPTIONS_FIXTURE}"
+printf '%s\n' '{"instance_name":"fixture","owner_passphrase":"test-owner-passphrase","pb_auto_login":true,"pb_admin_ha_user_ids":"test-ha-user"}' >"${OPTIONS_FIXTURE}"
 test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" instance_name fallback)" = fixture
 test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" pb_auto_login false)" = true
 test "$(python3 "${HERE}/read-option.py" "${OPTIONS_FIXTURE}" missing fallback)" = fallback
