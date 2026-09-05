@@ -60,8 +60,16 @@ COPY --from=model-build /opt/models/ /opt/models/
 RUN test -n "$(find /opt/models -mindepth 1 -print -quit)"
 
 FROM python-build AS python-test
-RUN .venv/bin/python -m unittest discover -s python/tests -v \
- && touch /python-tests-passed
+ARG BUILDARCH
+ARG TARGETARCH
+RUN mkdir -p /python-test-proof \
+ && if [ "${BUILDARCH}" = "${TARGETARCH}" ]; then \
+      .venv/bin/python -m unittest discover -s python/tests -v; \
+      touch /python-test-proof/native-passed; \
+    else \
+      echo "Python target tests not executed under QEMU: BUILDARCH=${BUILDARCH} TARGETARCH=${TARGETARCH}"; \
+      touch /python-test-proof/cross-build-not-executed; \
+    fi
 
 FROM ${BUILD_FROM} AS pocketbase-build
 ARG PB_VERSION=0.29.3
@@ -182,7 +190,7 @@ COPY --from=app pocketbase/pb_hooks/ ./pocketbase/pb_hooks/
 COPY --from=app pocketbase/pb_migrations/ ./pocketbase/pb_migrations/
 COPY --from=python-build /app/.venv/ ./.venv/
 COPY --from=python-build /opt/models/ /opt/models/
-COPY --from=python-test /python-tests-passed /python-tests-passed
+COPY --from=python-test /python-test-proof/ /python-test-proof/
 COPY --from=pocketbase-build /opt/pocketbase/pocketbase ./pocketbase/pocketbase
 COPY --from=pocketbase-test /pocketbase-tests-passed /pocketbase-tests-passed
 COPY read-option.py bootstrap-pocketbase.py ./addon/

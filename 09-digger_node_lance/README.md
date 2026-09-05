@@ -38,6 +38,11 @@ docker buildx build --load --platform linux/amd64 \
 
 The Dockerfile runs the Bun tests/typecheck, Python tests, offline-model
 preparation and a real served-asset PocketBase namespace proof as image gates.
+When cross-building on a different CPU architecture, target Python execution is
+not attempted under QEMU because ONNX Runtime uses instructions its emulator
+does not support. The image records that limitation at
+`/python-test-proof/cross-build-not-executed`; the native build records
+`/python-test-proof/native-passed` instead.
 
 ## Local container acceptance (not an HAOS install)
 
