@@ -35,6 +35,7 @@ export INSTANCE_NAME OWNER_PASSPHRASE API_TOKEN RATE_LIMIT INGRESS_AUTO_LOGIN
 export PUBLIC_URL PB_AUTO_LOGIN PB_ADMIN_HA_USER_IDS PB_OWNER_EMAIL PB_SUPERUSER_EMAIL
 export PORT=8111
 export LANCE_URL POCKETBASE_URL="${PB_URL}"
+export LANCE_HOST=127.0.0.1 LANCE_PORT=8110
 export LANCE_PATH PYTHONPATH="${APP_DIR}/python"
 export MODEL_CACHE=/opt/models FASTEMBED_CACHE_PATH=/opt/models
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
@@ -150,7 +151,7 @@ PB_SUPERUSER_PASSWORD="${PB_SUPERUSER_PASSWORD}" \
 unset PB_SUPERUSER_PASSWORD
 
 echo "starting Python Lance service privately on 127.0.0.1:8110"
-start_child LanceDB python3 -m digger_lance.server --host 127.0.0.1 --port 8110
+start_child LanceDB python3 -m digger_lance.server
 lance_pid="${child_pids[-1]}"
 wait_for_url LanceDB "${lance_pid}" "${LANCE_URL}/health" 180
 

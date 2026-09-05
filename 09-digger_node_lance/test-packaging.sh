@@ -33,6 +33,8 @@ grep -Fq 'ARG BUN_IMAGE=oven/bun:1.3.14-debian' "${HERE}/Dockerfile"
 grep -Fq 'python:3.12-slim-bookworm' "${HERE}/Dockerfile"
 grep -Fq 'MODEL_CACHE=/opt/models' "${HERE}/Dockerfile"
 grep -Fq -- '--build-context' "${HERE}/build-local.sh"
+grep -Fq 'export LANCE_HOST=127.0.0.1 LANCE_PORT=8110' "${HERE}/run.sh"
+grep -Fq 'start_child LanceDB python3 -m digger_lance.server' "${HERE}/run.sh"
 
 if grep -n -F '/data/digger.db' \
   "${HERE}/Dockerfile" "${HERE}/run.sh" "${HERE}/config.yaml" \
