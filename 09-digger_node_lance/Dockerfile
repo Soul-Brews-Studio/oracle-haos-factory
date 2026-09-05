@@ -37,7 +37,9 @@ COPY --from=app pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY --from=app python/ ./python/
 RUN .venv/bin/python -m digger_lance.download_model \
- && test -n "$(find /opt/models -mindepth 1 -print -quit)"
+ && test -n "$(find /opt/models -mindepth 1 -print -quit)" \
+ && DIGGER_REAL_MODEL_TEST=1 .venv/bin/python -m unittest -v \
+      python/tests/test_corpus_real_model.py
 
 FROM ${BUILD_FROM} AS python-build
 ENV UV_LINK_MODE=copy \
