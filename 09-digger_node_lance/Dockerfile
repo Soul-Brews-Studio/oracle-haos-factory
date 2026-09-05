@@ -107,8 +107,7 @@ RUN set -eu; \
 
 FROM pocketbase-build AS pocketbase-test
 WORKDIR /app
-ENV PYTHONPATH=/app/python \
-    PATH=/app/.venv/bin:/usr/local/bin:/usr/bin:/bin \
+ENV PYTHONPATH=/test-client \
     DIGGER_TEST_MODE=1 \
     DIGGER_INTERNAL_TOKEN=test-internal-token \
     OWNER_PASSPHRASE=open-sesame-please \
@@ -117,8 +116,9 @@ ENV PYTHONPATH=/app/python \
     POCKETBASE_TEST_URL=http://127.0.0.1:18091
 COPY --from=app pocketbase/pb_hooks/ /app/pocketbase/pb_hooks/
 COPY --from=app pocketbase/pb_migrations/ /app/pocketbase/pb_migrations/
-COPY --from=app python/ /app/python/
-COPY --from=python-build /app/.venv/ /app/.venv/
+COPY --from=app python/tests/test_pocketbase_backend.py /app/python/tests/test_pocketbase_backend.py
+COPY --from=app python/digger_lance/pocketbase.py /test-client/digger_lance/pocketbase.py
+RUN touch /test-client/digger_lance/__init__.py
 RUN set -eu; \
     /opt/pocketbase/pocketbase serve \
       --http=127.0.0.1:18091 \
@@ -134,7 +134,7 @@ RUN set -eu; \
       sleep 1; \
     done; \
     test "$ready" = 1; \
-    .venv/bin/python -m unittest discover -v -s python/tests -p test_pocketbase_backend.py; \
+    python3 -m unittest discover -v -s python/tests -p test_pocketbase_backend.py; \
     touch /pocketbase-tests-passed; \
     kill "$pid"; \
     wait "$pid" || true; \
