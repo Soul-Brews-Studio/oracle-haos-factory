@@ -1,5 +1,5 @@
 name: "Digger Node"
-version: "0.2.3"
+version: "0.3.0"
 slug: "digger_node"
 description: >-
   digger-node on your own disk: a Drupal-shaped content store (nodes, vocabularies,

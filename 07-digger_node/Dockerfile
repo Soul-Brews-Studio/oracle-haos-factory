@@ -19,7 +19,7 @@ ARG DIGGER_NODE_REPO="https://github.com/Soul-Brews-Studio/digger-node.git"
 # The FULL 40-character SHA, and that is not cosmetic: GitHub refuses
 # `git fetch origin <abbreviated-sha>` with a bare exit 128 and no explanation.
 # Measured here — the first build of this add-on died exactly that way.
-ARG DIGGER_NODE_REF="4b1f0f09ee46a335a16baf6d0f372503fad7f1d5"
+ARG DIGGER_NODE_REF="9ef395357f9748a1326e14015c340f2d0e130654"
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
