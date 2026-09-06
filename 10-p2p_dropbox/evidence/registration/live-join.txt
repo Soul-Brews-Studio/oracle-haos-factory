@@ -1,0 +1,14 @@
+TARGET http://kvmlab1.oracle.netbird:3847; ROOM default; TURN unset
+HTTP no key 401; with key 200
+SECOND IDENTITY m5-join-recv-1788676833378-5e336833: discovered alongside p2p-dropbox
+DUPLICATE ID-TAKEN: PASS; incumbent remains
+ROOM isolation + same name in different room: PASS
+send.ts m5-join-local-send-1788676833378-5e336833: exit 0
+SECOND RECEIVER SHA256 source=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed destination=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed MATCH
+send.ts m5-join-send-1788676833378-5e336833: exit 0
+upload.ts m5-join-http-1788676833378-5e336833: exit 0
+WEBRTC SHA256 source=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed destination=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed MATCH
+WEBRTC SAVED 2026-09-06/2026-09-06T06-40-35-980Z_44px7i68_join-p2p-1788676833378-5e336833.bin
+HTTP SHA256 source=c497ed0368eae4b38f99a532d9df37d14f06ac63c76e6ae89004eb39c8e8a604 destination=c497ed0368eae4b38f99a532d9df37d14f06ac63c76e6ae89004eb39c8e8a604 MATCH
+HTTP SAVED 2026-09-06/2026-09-06-06-40-36_join-http-1788676833378-5e336833.txt
+JOIN RECIPE PASS: second receiver, distinct senders, uniqueness, rooms, WebRTC + HTTP

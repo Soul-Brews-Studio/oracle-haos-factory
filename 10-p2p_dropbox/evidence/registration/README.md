@@ -15,3 +15,9 @@ unit-tested; actual relay connectivity remains untested.
 MAW extras reuse the existing private lab03 transport. Gist readback compares
 all five code/document files byte-for-byte, unlisted visibility. The local
 dashboard contains private filenames and is deliberately NOT published.
+
+Live deployment and join outputs are captured separately in `deploy-command.txt`,
+`options-preserved.txt`, `live-join.txt`, `files-preserved.txt`, and
+`live-statistics.json`. Build/container logs have trailing whitespace removed;
+verify.sh and live-join outputs are otherwise exact. Independent review approved
+ROOM, uniqueness and extras changes after fixing the punctuation-key regression.

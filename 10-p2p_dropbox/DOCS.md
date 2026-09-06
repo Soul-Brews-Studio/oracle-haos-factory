@@ -152,3 +152,37 @@ Use direct VPN access here; no host networking, public exposure or new UDP ports
 TURN: none in the fleet today; add a coturn add-on on kvmlab1 if relay is ever needed.
 TURN remains unset, generic and optional. Keep batches below the known roughly
 500-file reliability limit; this change does not fix bulk transfer behavior.
+
+## Independently executed registration proof (0.1.2)
+
+2026-09-06: implementation `8ebad2a7662c4455f041bd20ee1baa661cde9e24`
+was pushed then shipped with `git archive HEAD:10-p2p_dropbox`, `rsync -a --delete`
+restricted to `/addons/p2p_dropbox`, `ha store reload`, `ha addons update
+local_p2p_dropbox`, and `ha addons restart local_p2p_dropbox`. State is `started`,
+version `0.1.2`. All existing options were compared privately and preserved;
+Supervisor added only `room: default`. TURN remained empty. Only this add-on was
+updated. Private option snapshots were removed after equality verification;
+source backup is retained at `/tmp/p2p-registration.fbdCdl/source-before.tar.gz`.
+
+`tests/live-join-proof.ts` ran on **m5** against the real VPN signaling server,
+using the existing key through stdin, never argv/logs. It started a distinct m5
+receiver, discovered it alongside `p2p-dropbox`, verified ID-TAKEN, proved another
+room could use the same name without seeing the incumbent, sent a real file to
+the m5 receiver, then sent WebRTC and HTTP fixtures to kvmlab1. All three transfers
+matched independent SHA256. SSH disk hashes confirmed both server-side fixtures
+and the WebRTC sender ledger entry. Exact output: `evidence/registration/live-join.txt`
+and `files-preserved.txt`. The original 15 data files and ledger prefix are intact;
+two proof files were added (17 data files, 18 entries including the ledger).
+
+The inferred recipe was corrected: unique identity per concurrent process,
+explicit room selection, current MAW defaults, exact authenticated hash download,
+and no incorrect SSH-add-on localhost/UDP tunnel assumption. No actual new laptop
+or TURN topology is claimed: m5 used a second process identity as requested.
+
+MAW helpers and full AI prompt, with code/tests/installer:
+https://gist.github.com/nazt/6b0a51d8f263cec25639875f836f6a3f
+The Gist is unlisted, not confidential; it contains no credentials or private
+transport source. `maw dropbox stats`, `share`, `ui`, and local `dashboard` are
+installed and exercised on m5. The dashboard is a private static snapshot, not a
+new always-running service. Authenticated HA browser viewing was not rerun in
+this round; the existing auto-login behavior remains covered by regression tests.
