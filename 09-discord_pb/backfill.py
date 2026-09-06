@@ -277,10 +277,11 @@ def backfill(channel, token, high_water=None):
         path = f"/channels/{channel}/messages?{urlencode(query)}"
         position["request"] = path
         print(json.dumps(position, sort_keys=True), flush=True)
+        fetched_at = datetime.now(timezone.utc).isoformat()
         page = request_json(API + path, headers)
         if not isinstance(page, list): raise ValueError("Discord messages response must be an array")
         if not page: break
-        normalized = [normalize(message, context) for message in page]
+        normalized = [normalize(dict(message, _discord_pb_fetched_at=fetched_at), context) for message in page]
         ids = [int(message["message_id"]) for message in normalized]
         if mode == "historical":
             if cursor is not None and any(message_id >= int(cursor) for message_id in ids):

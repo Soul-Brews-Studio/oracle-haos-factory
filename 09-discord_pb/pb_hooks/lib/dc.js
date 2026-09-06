@@ -39,11 +39,46 @@ var __export = (target, all) => {
 // sdk/dc.ts
 var exports_dc = {};
 __export(exports_dc, {
-  createDC: () => createDC
+  createDC: () => createDC,
+  SSEDecoder: () => SSEDecoder
 });
 module.exports = __toCommonJS(exports_dc);
+
+class SSEDecoder {
+  buffer = "";
+  feed(chunk) {
+    this.buffer += chunk;
+    this.buffer = this.buffer.replace(/\r\n/g, `
+`).replace(/\r(?!$)/g, `
+`);
+    const events = [];
+    let boundary;
+    while ((boundary = this.buffer.indexOf(`
+
+`)) !== -1) {
+      const block = this.buffer.slice(0, boundary);
+      this.buffer = this.buffer.slice(boundary + 2);
+      let event = "message";
+      const data = [];
+      for (const line of block.split(`
+`)) {
+        if (line.startsWith("event:"))
+          event = line.slice(6).trimStart();
+        else if (line.startsWith("data:"))
+          data.push(line.slice(5).trimStart());
+      }
+      if (data.length)
+        events.push({ event, data: data.join(`
+`) });
+    }
+    return events;
+  }
+}
 function join(baseUrl, path) {
   return baseUrl.replace(/\/+$/, "") + "/api/dc" + path;
+}
+function pbJoin(baseUrl, path) {
+  return baseUrl.replace(/\/+$/, "") + path;
 }
 function query(values) {
   const record = values;
@@ -139,6 +174,112 @@ function createDC(config) {
       },
       import() {
         return request("POST", path + "/import", {});
+      },
+      stream(onMessage) {
+        if (typeof onMessage !== "function")
+          throw new Error("stream(onMessage) requires a callback");
+        const realtimeFetch = config.realtimeFetch || (typeof fetch === "function" ? fetch : null);
+        if (!realtimeFetch || typeof AbortController !== "function" || typeof TextDecoder !== "function") {
+          throw new Error("stream() requires fetch and Web Streams support; PocketBase JSVM callers cannot use realtime");
+        }
+        const controller = new AbortController;
+        const backoffMs = Math.max(0, config.realtimeBackoffMs ?? 1000);
+        let readyResolve, readyReject;
+        let connected = false, activeReader = null;
+        const ready = new Promise((resolve, reject) => {
+          readyResolve = resolve;
+          readyReject = reject;
+        });
+        ready.catch(() => {});
+        const done = (async () => {
+          let targetId = "", targetKind = "channel";
+          try {
+            const resolved = await request("GET", path + "/read?limit=1");
+            if (!resolved || typeof resolved !== "object" || !resolved.channel?.id) {
+              throw new Error("Discord channel API returned an invalid resolved channel");
+            }
+            const target = resolved.channel;
+            targetId = String(target.id);
+            targetKind = String(target.kind || "channel");
+          } catch (error) {
+            readyReject(error);
+            throw error;
+          }
+          while (!controller.signal.aborted) {
+            try {
+              const response = await realtimeFetch(pbJoin(config.baseUrl, "/api/realtime"), {
+                method: "GET",
+                headers: { Accept: "text/event-stream", Authorization: config.token },
+                signal: controller.signal
+              });
+              if (!response.ok || !response.body)
+                throw new Error("PocketBase realtime connection failed (HTTP " + response.status + ")");
+              const reader = response.body.getReader();
+              activeReader = reader;
+              const text = new TextDecoder;
+              const decoder = new SSEDecoder;
+              let subscribed = false;
+              while (!controller.signal.aborted) {
+                const part = await reader.read();
+                if (part.done)
+                  break;
+                for (const event of decoder.feed(text.decode(part.value, { stream: true }))) {
+                  let data;
+                  try {
+                    data = JSON.parse(event.data);
+                  } catch (_) {
+                    continue;
+                  }
+                  if (event.event === "PB_CONNECT") {
+                    if (typeof data.clientId !== "string" || !data.clientId)
+                      throw new Error("PocketBase realtime did not provide a client ID");
+                    const subscribedResponse = await realtimeFetch(pbJoin(config.baseUrl, "/api/realtime"), {
+                      method: "POST",
+                      headers: { Accept: "application/json", Authorization: config.token, "Content-Type": "application/json" },
+                      body: JSON.stringify({ clientId: data.clientId, subscriptions: ["discord_messages/*"] }),
+                      signal: controller.signal
+                    });
+                    if (!subscribedResponse.ok)
+                      throw new Error("PocketBase realtime subscription failed (HTTP " + subscribedResponse.status + ")");
+                    subscribed = true;
+                    if (!connected) {
+                      connected = true;
+                      readyResolve();
+                    }
+                    continue;
+                  }
+                  if (!subscribed || event.event !== "discord_messages/*" && event.event !== "discord_messages")
+                    continue;
+                  const action = data.action;
+                  const record = data.record;
+                  if (action !== "create" && action !== "update" && action !== "delete" || !record || typeof record !== "object")
+                    continue;
+                  const message = record;
+                  const matches = targetKind === "thread" ? message.thread_id === targetId : message.channel_id === targetId && !message.thread_id;
+                  if (matches)
+                    onMessage(message, action);
+                }
+              }
+              activeReader = null;
+            } catch (error) {
+              activeReader?.cancel();
+              activeReader = null;
+              if (controller.signal.aborted)
+                break;
+              if (!connected && error instanceof Error && /HTTP (400|401|403|404)/.test(error.message)) {
+                readyReject(error);
+                throw error;
+              }
+            }
+            if (!controller.signal.aborted)
+              await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          }
+        })();
+        done.catch(() => {});
+        return { ready, done, close: () => {
+          controller.abort();
+          activeReader?.cancel();
+        } };
       },
       allowed(verb) {
         if (typeof verb !== "string" || !verb.trim())

@@ -6,12 +6,13 @@ verify:
     git log --oneline origin/main..HEAD -- .
     python3 -m unittest discover -s tests -p 'test_*.py' -v
     node tests/test_dc_api.js
+    node tests/test_live_ingest.js
     bun test sdk/dc.test.ts
     tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
-    python3 -m py_compile backfill.py service.py dc_model.py tests/*.py
+    python3 -m py_compile backfill.py service.py dc_model.py gateway.py gateway_ws.py tests/*.py
     bash -n run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh
-    shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh sdk/build.sh
+    shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh sdk/build.sh rootfs/etc/services.d/discord-gateway/run
     git diff --check -- .
 
 proof:

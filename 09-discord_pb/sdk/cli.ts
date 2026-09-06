@@ -15,6 +15,7 @@ function usage(message?: string): never {
     "  bun sdk/cli.ts guild <id-or-name> channels",
     "  bun sdk/cli.ts config [get|download]",
     "  bun sdk/cli.ts channel <id-or-name> read [--limit N] [--since ISO] [--before ISO]",
+    "  bun sdk/cli.ts channel <id-or-name> tail",
     "  bun sdk/cli.ts channel <id-or-name> import",
     "  bun sdk/cli.ts channel <id-or-name> post <text>",
     "  bun sdk/cli.ts channel <id-or-name> thread <name> <starter>",
@@ -35,7 +36,7 @@ export function parseCLI(args: string[]): CLICommand {
   }
   if (args[0] !== "channel" || !args[1] || !args[2]) usage("Missing channel command");
   const [, channel, action, ...rest] = args;
-  const allowed = new Set(["read", "import", "post", "thread", "pin", "archive"]);
+  const allowed = new Set(["read", "tail", "import", "post", "thread", "pin", "archive"]);
   if (!allowed.has(action)) usage("Unknown channel action: " + action);
   const read: ReadOptions = {};
   if (action === "read") {
@@ -50,7 +51,7 @@ export function parseCLI(args: string[]): CLICommand {
       else read.before = value;
     }
   } else {
-    const expected: Record<string, number> = {import: 0, post: 1, thread: 2, pin: 1, archive: 0};
+    const expected: Record<string, number> = {tail: 0, import: 0, post: 1, thread: 2, pin: 1, archive: 0};
     if (rest.length !== expected[action]) usage(action + " expects " + expected[action] + " argument(s)");
   }
   return {kind: "channel", channel, action, args: action === "read" ? [] : rest, read};
@@ -62,6 +63,9 @@ export function run(command: CLICommand, client: ReturnType<typeof createDC>) {
   if (command.kind === "config") return command.action === "download" ? client.configYaml() : client.config();
   const handle = client.channel(command.channel);
   if (command.action === "read") return handle.read(command.read);
+  if (command.action === "tail") return handle.stream((record, action) => {
+    console.log(JSON.stringify({action, record}));
+  });
   if (command.action === "import") return handle.import();
   if (command.action === "post") return handle.post(command.args[0]);
   if (command.action === "thread") return handle.action.thread(command.args[0], command.args[1]);
@@ -75,7 +79,15 @@ if (import.meta.main) {
     const baseUrl = Bun.env.DC_URL || "";
     const token = Bun.env.DC_TOKEN || "";
     const result = await run(command, createDC({baseUrl, token}));
-    if (command.kind === "config" && command.action === "download") {
+    if (command.kind === "channel" && command.action === "tail") {
+      if (!result || typeof result !== "object" || !("ready" in result) || !("done" in result)) throw new Error("Realtime tail did not start");
+      const stream = result as {ready: Promise<void>; done: Promise<void>; close(): void};
+      const stop = () => stream.close();
+      process.once("SIGINT", stop); process.once("SIGTERM", stop);
+      await stream.ready;
+      console.error("Live tail connected. Press Ctrl-C to stop.");
+      await stream.done;
+    } else if (command.kind === "config" && command.action === "download") {
       if (typeof result !== "string") throw new Error("Config YAML response was not text");
       await Bun.write("dc.config.yaml", result);
       console.log("dc.config.yaml");

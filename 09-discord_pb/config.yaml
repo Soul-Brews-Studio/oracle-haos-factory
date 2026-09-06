@@ -1,5 +1,5 @@
 name: "Discord PocketBase"
-version: "0.1.7"
+version: "0.1.8"
 slug: "discord_pb"
 description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/01-discord-pb-kvmlab1/09-discord_pb"
@@ -26,6 +26,7 @@ stage: experimental
 options:
   channels: ""
   guilds: ""
+  live: true
   poll_minutes: 60
   allow_post: false
   post_channels: ""
@@ -36,6 +37,7 @@ schema:
   bot_token: password?
   channels: str
   guilds: str
+  live: bool
   poll_minutes: int(1,10080)
   allow_post: bool
   post_channels: str

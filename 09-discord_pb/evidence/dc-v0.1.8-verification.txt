@@ -1,0 +1,166 @@
+test "$(git branch --show-current)" = lab/01-discord-pb-kvmlab1
+git log --oneline origin/main..HEAD -- .
+870d5c9 docs(discord-pb): normalize proof output whitespace
+614c2ad feat(discord-pb): declared channel model and authenticated handles
+7497b7e fix(discord_pb): complete entity hierarchy and paginated name discovery
+95383d6 fix(discord_pb): use relative Supervisor ingress entry
+6354cd7 feat(discord_pb): add persistent sidebar and authenticated import API
+00b465a feat(discord_pb): resolve Discord entities by name
+48bb520 fix(discord_pb): complete ingress admin auto-login
+71d8dc1 test(discord_pb): record both-arch incremental and browser proof
+9330c89 fix(discord_pb): persist incremental cursors and isolate admin auth
+14edd8e feat: add self-contained Discord PocketBase addon
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+test_205_historical_then_new_process_incremental_imports_zero (test_backfill.BackfillTests) ... ok
+test_429_403_5xx_and_post_contract (test_backfill.BackfillTests) ... ok
+test_atomic_state_replace_and_lock_rejects_concurrency (test_backfill.BackfillTests) ... ok
+test_channel_failure_continues_and_returns_nonzero (test_backfill.BackfillTests) ... {"channel_id": "10000000000000001", "error": "HTTP Error 403: forbidden", "failed": true}
+{"before": "latest", "channel_id": "10000000000000002", "mode": "historical", "request": "/channels/10000000000000002/messages?limit=100"}
+{"before": "11000000000000001", "channel_id": "10000000000000002", "mode": "historical", "request": "/channels/10000000000000002/messages?limit=100&before=11000000000000001"}
+{"channel_id": "10000000000000002", "high_water": "11000000000000001", "inserted": 1, "mode": "historical", "pages": 1, "updated": 0}
+{"channels": 2, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "HTTP Error 403: forbidden"}], "inserted": 1, "updated": 0}
+ok
+test_corrupt_state_fails_closed_before_api_call (test_backfill.BackfillTests) ... {"channels": 1, "complete": false, "failures": [{"channel_id": null, "error": "Expecting value: line 1 column 1 (char 0)"}], "inserted": 0, "updated": 0}
+ok
+test_empty_historical_commits_zero_then_uses_after_zero (test_backfill.BackfillTests) ... {"before": "latest", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100"}
+{"channel_id": "10000000000000001", "high_water": "0", "inserted": 0, "mode": "historical", "pages": 0, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+{"after": "0", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=0"}
+{"channel_id": "10000000000000001", "high_water": "0", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_fixture_token_and_snowflake_guards (test_backfill.BackfillTests) ... ok
+test_incremental_more_than_100_has_no_gap_despite_unsorted_pages (test_backfill.BackfillTests) ... {"after": "11000000000000000", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000000"}
+{"after": "11000000000000100", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000100"}
+{"after": "11000000000000200", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000200"}
+{"after": "11000000000000205", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000205"}
+{"channel_id": "10000000000000001", "high_water": "11000000000000205", "inserted": 205, "mode": "incremental", "pages": 3, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 205, "updated": 0}
+ok
+test_mid_sweep_failure_never_advances_initial_or_incremental_mark (test_backfill.BackfillTests) ... {"before": "latest", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100"}
+{"before": "11000000000000106", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100&before=11000000000000106"}
+{"channel_id": "10000000000000001", "error": "mid-sweep", "failed": true}
+{"channels": 1, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "mid-sweep"}], "inserted": 0, "updated": 0}
+{"after": "11000000000000000", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000000"}
+{"after": "11000000000000100", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000100"}
+{"channel_id": "10000000000000001", "error": "mid-sweep", "failed": true}
+{"channels": 1, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "mid-sweep"}], "inserted": 0, "updated": 0}
+ok
+test_name_resolution_exact_ambiguous_and_missing (test_backfill.BackfillTests) ... ok
+test_normalize_uses_only_channel_context_for_routing (test_backfill.BackfillTests) ... ok
+test_archive_rejects_a_missing_cursor_when_more_pages_are_claimed (test_entities.ArchivedThreadPaginationTests) ... ok
+test_archive_rejects_a_repeated_cursor (test_entities.ArchivedThreadPaginationTests) ... ok
+test_joined_private_archive_uses_the_last_thread_id_as_cursor (test_entities.ArchivedThreadPaginationTests) ... ok
+test_public_archive_encodes_its_timestamp_cursor (test_entities.ArchivedThreadPaginationTests) ... ok
+test_channel_parent_is_guild_even_when_discord_reports_a_category_parent (test_entities.EntityShapeTests) ... ok
+test_guild_parent_is_null (test_entities.EntityShapeTests) ... ok
+test_thread_parent_remains_its_channel (test_entities.EntityShapeTests) ... ok
+test_post_entities_rejects_a_malformed_response_from_a_later_batch (test_entities.EntityUpsertTests) ... ok
+test_post_entities_splits_requests_at_500_records (test_entities.EntityUpsertTests) ... ok
+test_discovery_scans_every_supported_archive_container (test_entities.GuildDiscoveryTests) ... ok
+test_private_archive_403_falls_back_to_joined_private_archive (test_entities.GuildDiscoveryTests) ... ok
+test_repeated_discovery_rewalks_archives_and_adds_new_threads_without_duplicates (test_entities.GuildDiscoveryTests) ... ok
+test_main_discovers_named_guild_before_resolving_named_channel (test_entities.MainResolutionOrderTests) ... {"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_named_guild_bootstrap_paginates_all_available_guilds (test_entities.MainResolutionOrderTests) ... {"channels": 0, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_casefold_ambiguity_includes_matches_from_later_pages (test_entities.PaginatedNameResolutionTests) ... ok
+test_exact_match_on_a_later_page_wins_over_casefold_matches (test_entities.PaginatedNameResolutionTests) ... ok
+test_missing_name_is_reported_only_after_the_last_page (test_entities.PaginatedNameResolutionTests) ... ok
+test_unicode_casefold_match_can_be_found_on_a_later_page (test_entities.PaginatedNameResolutionTests) ... ok
+test_existing_category_parents_are_repaired_without_touching_messages_or_raw (test_entity_migration.EntityMigrationTests) ... ok
+test_bounded_queue_reconnects_without_sequence_hole (test_gateway.GatewayTests) ... ok
+test_close_code_policy (test_gateway.GatewayTests) ... ok
+test_dispatch_gating_dedupe_heartbeat_reconnect_and_resume (test_gateway.GatewayTests) ... ok
+test_established_resume_resets_consecutive_failure_backoff (test_gateway.GatewayTests) ... ok
+test_failed_pb_event_does_not_advance_sequence_past_failure (test_gateway.GatewayTests) ... ok
+test_fatal_message_content_close_is_terminal_and_marks_gap (test_gateway.GatewayTests) ... ok
+test_fixture_rejects_token_before_request (test_gateway.GatewayTests) ... ok
+test_gateway_bootstrap_retries_transient_and_idles_on_401 (test_gateway.GatewayTests) ... ok
+test_gateway_bot_fixture_is_private_and_identify_has_exact_intents (test_gateway.GatewayTests) ... ok
+test_invalid_session_clear_happens_after_stale_dispatch_queue_drains (test_gateway.GatewayTests) ... ok
+test_missing_heartbeat_ack_requests_reconnect (test_gateway.GatewayTests) ... ok
+test_options_live_defaults_true_and_rejects_non_boolean (test_gateway.GatewayTests) ... ok
+test_partial_frame_timeout_reconnects_without_reusing_consumed_bytes (test_gateway.GatewayTests) ... ok
+test_session_start_quota_refresh_and_identify_spacing (test_gateway.GatewayTests) ... ok
+test_live_and_rest_normalizers_have_identical_field_mapping (test_live_normalize.NormalizeParityTests) ... ok
+test_actions_are_independent_from_post_permission (test_model.DeclaredModelTests) ... ok
+test_ambiguous_and_unknown_names_list_candidates (test_model.DeclaredModelTests) ... ok
+test_cli_json_contract (test_model.DeclaredModelTests) ... ok
+test_discovery_returns_raw_guild_refs_before_entities_exist (test_model.DeclaredModelTests) ... ok
+test_import_allows_supported_thread_and_false_override_for_unsupported_rows (test_model.DeclaredModelTests) ... ok
+test_import_rejects_unsupported_discord_types_explicitly_and_via_wildcard (test_model.DeclaredModelTests) ... ok
+test_invalid_existing_file_fails_closed_and_is_not_overwritten_by_set (test_model.DeclaredModelTests) ... ok
+test_missing_config_is_safe_empty_model (test_model.DeclaredModelTests) ... ok
+test_normalized_object_is_bounded_even_without_raw_yaml (test_model.DeclaredModelTests) ... ok
+test_resolves_exact_then_casefold_then_unique_substring_and_scopes_to_guild (test_model.DeclaredModelTests) ... ok
+test_save_canonicalizes_refs_atomically_and_round_trips (test_model.DeclaredModelTests) ... ok
+test_set_on_missing_seeds_initial_selection (test_model.DeclaredModelTests) ... ok
+test_set_preserves_declared_model_and_oracles (test_model.DeclaredModelTests) ... ok
+test_set_preserves_wildcard_for_channels_discovered_later (test_model.DeclaredModelTests) ... ok
+test_set_rejects_channel_without_known_guild_cleanly (test_model.DeclaredModelTests) ... ok
+test_star_defaults_only_apply_inside_selected_guild_and_explicit_values_win (test_model.DeclaredModelTests) ... ok
+test_strict_types_unknown_keys_and_action_verbs (test_model.DeclaredModelTests) ... ok
+test_two_request_file_set_processes_preserve_both_rows (test_model.DeclaredModelTests) ... ok
+test_yaml_rejects_duplicate_keys_aliases_and_oversize (test_model.DeclaredModelTests) ... ok
+test_bun_sdk_and_cli (test_sdk.SDKTests) ... ok
+test_committed_jsvm_build_matches_source (test_sdk.SDKTests) ... ok
+test_jsvm_commonjs_build_has_sync_transport (test_sdk.SDKTests) ... ok
+test_declared_model_wins_even_before_option_selection_seed (test_selection.SelectedPollingTests) ... {"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_explicit_import_is_channel_only_and_acks_the_observed_request (test_selection.SelectedPollingTests) ... {"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_failed_import_keeps_request_for_retry (test_selection.SelectedPollingTests) ... {"channel_id": "10000000000000002", "error": "fixture failure", "failed": true}
+{"channels": 1, "complete": false, "failures": [{"channel_id": "10000000000000002", "error": "fixture failure"}], "inserted": 0, "updated": 0}
+ok
+test_guild_lists_but_does_not_implicitly_import_anything (test_selection.SelectedPollingTests) ... {"channels": 0, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_initial_seed_rejects_container_without_persisting_choices (test_selection.SelectedPollingTests) ... ok
+test_option_does_not_reenable_previously_deselected_channel (test_selection.SelectedPollingTests) ... {"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_invalid_options_fail_closed (test_service.ServiceTests) ... ok
+test_job_state_is_atomic_private_and_drops_old_completion (test_service.ServiceTests) ... ok
+test_missing_options_does_not_silently_idle (test_service.ServiceTests) ... ok
+test_active_wal_committed_row_is_counted_without_source_changes (test_verify.ArchiveSnapshotTests) ... ok
+test_unstable_copy_retries_only_three_times_and_fails_explicitly (test_verify.ArchiveSnapshotTests) ... ok
+test_fetch_status_uses_timeout (test_verify.VerifyTests) ... ok
+test_malformed_status_never_becomes_zero (test_verify.VerifyTests) ... ok
+test_mismatch_prints_total_and_returns_nonzero (test_verify.VerifyTests) ... ok
+test_parent_and_thread_rows_group_by_parent_channel_only (test_verify.VerifyTests) ... ok
+test_selection_rejects_empty_duplicates_injection_and_unknown (test_verify.VerifyTests) ... ok
+
+----------------------------------------------------------------------
+Ran 83 tests in 3.679s
+
+OK
+node tests/test_dc_api.js
+dc api helper: 35 assertions passed
+node tests/test_live_ingest.js
+Live ingest: 38 assertions PASS
+bun test sdk/dc.test.ts
+bun test v1.3.14 (0d9b296a)
+
+sdk/dc.test.ts:
+(pass) dc sdk > sync injected transport supports handles and encodes names [0.29ms]
+(pass) dc sdk > reads declared config and allowed action decisions [0.12ms]
+(pass) dc sdk > promise transport and guild list preserve the same API [0.05ms]
+(pass) dc sdk > validates write arguments before transport [0.05ms]
+(pass) PocketBase realtime > incremental SSE parser supports CRLF, split chunks, and multiline data [0.10ms]
+(pass) PocketBase realtime > authenticates the handshake, filters channel/thread events, and reconnects [2.74ms]
+(pass) PocketBase realtime > thread handles include only the exact thread [0.13ms]
+(pass) PocketBase realtime > reports unsupported JSVM realtime before constructing browser primitives [0.04ms]
+(pass) cli > parses reads and rejects incomplete writes [0.11ms]
+(pass) cli > dispatches channel actions without exposing credentials [0.07ms]
+(pass) cli > CLI config download uses the raw YAML endpoint [0.03ms]
+(pass) cli > CLI tail dispatches to the realtime channel handle [0.08ms]
+
+ 12 pass
+ 0 fail
+ 37 expect() calls
+Ran 12 tests across 1 file. [10.00ms]
+tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
+for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
+python3 -m py_compile backfill.py service.py dc_model.py gateway.py gateway_ws.py tests/*.py
+bash -n run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh
+shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh sdk/build.sh rootfs/etc/services.d/discord-gateway/run
+git diff --check -- .

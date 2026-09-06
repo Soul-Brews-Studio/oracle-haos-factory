@@ -2,6 +2,8 @@
 const $ = (id) => document.getElementById(id);
 const KEY = "__dc_superuser_auth__";
 let session = null, page = 1, pages = 1, importBatch = null, authenticated = false, configModel = null;
+let realtimeController = null, realtimeGeneration = 0, realtimeConnected = false;
+const entityNames = new Map();
 
 function notify(id, message, error = false) {
   $(id).textContent = message;
@@ -183,32 +185,117 @@ async function loadMessages() {
   if (channel) query.set("filter", "channel_id=" + JSON.stringify(channel) + " || thread_id=" + JSON.stringify(channel));
   const data = await api("api/collections/discord_messages/records?" + query);
   const ids = [...new Set(data.items.flatMap(row => [row.channel_id, row.thread_id, row.guild_id]).filter(Boolean))];
-  const names = new Map();
   if (ids.length) {
     const eq = new URLSearchParams({perPage: 100, filter: ids.map(id => "entity_id=" + JSON.stringify(id)).join(" || ")});
     const entities = await api("api/collections/discord_entities/records?" + eq);
-    for (const entity of entities.items) names.set(entity.entity_id, entity.name);
+    for (const entity of entities.items) entityNames.set(entity.entity_id, entity.name);
   }
   $("messages").replaceChildren();
-  for (const row of data.items) {
+  for (const row of data.items) $("messages").append(messageElement(row));
+  pages = Math.max(1, data.totalPages);
+  notify("page-label", "Page " + page + " of " + pages);
+  notify("message-status", data.totalItems ? data.totalItems.toLocaleString() + " matching messages" : "No messages yet. Configure a Discord backfill or import a JSON batch.");
+  $("previous").disabled = page <= 1; $("next").disabled = page >= pages;
+}
+function deletedMessage(row) {
+  let raw = row.raw;
+  if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch (_) {} }
+  return raw?._discord_pb_deleted === true;
+}
+function messageElement(row, action = "") {
     const li = document.createElement("li"), meta = document.createElement("div");
+    li.dataset.messageId = row.message_id || "";
     meta.className = "message-meta";
     const author = document.createElement("strong"); author.textContent = row.author_name || row.author_id;
     const time = document.createElement("time"); time.dateTime = row.ts;
     const date = new Date(row.ts); time.textContent = Number.isNaN(date.getTime()) ? row.ts : date.toLocaleString();
     meta.append(author, time);
     const content = document.createElement("p"); content.className = "message-content";
-    content.textContent = row.content || "(No text content)";
+    const deleted = action === "delete" || deletedMessage(row);
+    content.textContent = deleted ? "(Deleted message)" : (row.content || "(No text content)");
+    if (deleted) li.classList.add("deleted-message");
     const detail = document.createElement("div"); detail.className = "message-ids";
     const target = row.thread_id || row.channel_id;
-    detail.textContent = (names.get(target) || "Unnamed target") + " · " + target + " · message " + row.message_id;
+    detail.textContent = (entityNames.get(target) || "Unnamed target") + " · " + target + " · message " + row.message_id;
     li.append(meta, content, detail, copyButton(row.message_id));
-    $("messages").append(li);
+    return li;
+}
+function matchesCurrentChannel(row) {
+  const channel = $("channel-filter").value.trim();
+  return !channel || row.channel_id === channel || row.thread_id === channel;
+}
+function applyRealtimeMessage(row, action) {
+  if (!row?.message_id) return;
+  const existing = [...$("messages").children].find(item => item.dataset.messageId === row.message_id);
+  if (!matchesCurrentChannel(row)) { existing?.remove(); return; }
+  const replacement = messageElement(row, action);
+  if (existing) existing.replaceWith(replacement);
+  else if (page === 1) $("messages").prepend(replacement);
+  while ($("messages").children.length > 20) $("messages").lastElementChild.remove();
+}
+class PanelSSEDecoder {
+  constructor() { this.buffer = ""; }
+  feed(chunk) {
+    this.buffer += chunk;
+    this.buffer = this.buffer.replace(/\r\n/g, "\n").replace(/\r(?!$)/g, "\n");
+    const events = []; let boundary;
+    while ((boundary = this.buffer.indexOf("\n\n")) !== -1) {
+      const block = this.buffer.slice(0, boundary); this.buffer = this.buffer.slice(boundary + 2);
+      let event = "message"; const data = [];
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trimStart();
+        else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+      }
+      if (data.length) events.push({event, data: data.join("\n")});
+    }
+    return events;
   }
-  pages = Math.max(1, data.totalPages);
-  notify("page-label", "Page " + page + " of " + pages);
-  notify("message-status", data.totalItems ? data.totalItems.toLocaleString() + " matching messages" : "No messages yet. Configure a Discord backfill or import a JSON batch.");
-  $("previous").disabled = page <= 1; $("next").disabled = page >= pages;
+}
+function stopRealtime() {
+  realtimeGeneration++; realtimeController?.abort(); realtimeController = null; realtimeConnected = false;
+}
+function startRealtime() {
+  stopRealtime();
+  const generation = realtimeGeneration, controller = new AbortController();
+  realtimeController = controller;
+  (async () => {
+    while (!controller.signal.aborted && generation === realtimeGeneration) {
+      let reader = null;
+      try {
+        notify("live-status", "Connecting live updates…");
+        const response = await fetch("./api/realtime", {headers: {Accept: "text/event-stream", Authorization: session.token}, signal: controller.signal, cache: "no-store"});
+        if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
+        reader = response.body.getReader();
+        const text = new TextDecoder(), decoder = new PanelSSEDecoder();
+        let subscribed = false;
+        while (!controller.signal.aborted) {
+          const part = await reader.read(); if (part.done) break;
+          for (const event of decoder.feed(text.decode(part.value, {stream: true}))) {
+            let data; try { data = JSON.parse(event.data); } catch (_) { continue; }
+            if (event.event === "PB_CONNECT") {
+              const subscribe = await fetch("./api/realtime", {method: "POST", cache: "no-store", signal: controller.signal,
+                headers: {Accept: "application/json", Authorization: session.token, "Content-Type": "application/json"},
+                body: JSON.stringify({clientId: data.clientId, subscriptions: ["discord_messages/*"]})});
+              if (!subscribe.ok) throw new Error("subscription HTTP " + subscribe.status);
+              subscribed = true; realtimeConnected = true;
+              notify("live-status", "Live updates connected.");
+              // Close the initial load -> subscribe race, and fill non-replayed
+              // gaps after reconnect. Rendering is idempotent by message_id.
+              await loadMessages();
+              continue;
+            }
+            if (!subscribed || (event.event !== "discord_messages/*" && event.event !== "discord_messages")) continue;
+            if (["create", "update", "delete"].includes(data.action) && data.record) applyRealtimeMessage(data.record, data.action);
+          }
+        }
+      } catch (error) {
+        try { await reader?.cancel(); } catch (_) {}
+        if (controller.signal.aborted) break;
+        realtimeConnected = false; notify("live-status", "Live updates reconnecting…", true);
+      }
+      if (!controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  })();
 }
 async function loadJob() {
   const job = await api("api/discord/backfill");
@@ -224,6 +311,7 @@ async function refresh() {
     await totals();
     await authenticate();
     await Promise.all([loadMessages(), loadJob(), loadChannels()]);
+    startRealtime();
   } catch (error) {
     notify("login-status", error.message + " You can also sign in using Open PocketBase admin, then return and Refresh.", true);
   } finally { $("refresh").disabled = false; }

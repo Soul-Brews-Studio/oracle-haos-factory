@@ -100,6 +100,56 @@ checks.yamlSaveRoundTrip=await js(`(async()=>{const token=JSON.parse(localStorag
 if(!checks.yamlSaveRoundTrip)throw new Error('UI raw YAML save did not persist');
 if(!checks.modelTabVisible||checks.guildGroups<1||checks.rowSaveControls!==checks.channelCount||!checks.rawYamlLoaded||!checks.invalidYamlPreserved)
  throw new Error('Declared model UI failed: '+JSON.stringify(checks));
+await js(`document.getElementById('archive-tab').click()`);
+for(let i=0;i<100;i++){
+ if(await js(`document.getElementById('live-status').textContent.includes('connected')`))break;
+ if(i===99)throw new Error('Panel realtime subscription did not connect');
+ await new Promise(resolve=>setTimeout(resolve,100));
+}
+const liveChecks=await js(`(async()=>{
+  const token=JSON.parse(localStorage.getItem('__dc_superuser_auth__')).token;
+  const headers={Authorization:token,'Content-Type':'application/json'};
+  const listed=await(await fetch('./api/dc/channels',{headers})).json();
+  const channels=Array.isArray(listed)?listed:listed.channels;
+  const channel=channels.find(row=>row.kind!=='thread'&&row.importable!==false);
+  if(!channel)throw new Error('No importable channel for realtime panel proof');
+  const messageId='79000'+Date.now();
+  const waitFor=async(predicate,label)=>{
+    const deadline=Date.now()+5000;
+    while(Date.now()<deadline){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}
+    throw new Error('Timed out waiting for panel realtime '+label);
+  };
+  const importRow=async(content,raw={})=>{
+    const row={message_id:messageId,channel_id:String(channel.id),guild_id:channel.guild_id||null,
+      author_id:'800000000000000099',author_name:'panel-realtime-proof',author_is_bot:true,
+      content,attachments_json:[],embeds:[],ts:new Date().toISOString(),raw};
+    const response=await fetch('./api/discord/import',{method:'POST',headers,body:JSON.stringify({messages:[row]})});
+    if(!response.ok)throw new Error('Panel realtime import failed: '+response.status);
+  };
+  const matching=()=>[...document.querySelectorAll('#messages li')].filter(row=>row.dataset.messageId===messageId);
+  let result={liveCreate:false,liveUpdate:false,liveTombstone:false};
+  try{
+    await importRow('panel live create');
+    await waitFor(()=>document.querySelector('#messages li:first-child')?.dataset.messageId===messageId&&
+      document.querySelector('#messages li:first-child .message-content')?.textContent==='panel live create','create');
+    result.liveCreate=true;
+    await importRow('panel live update');
+    await waitFor(()=>matching().length===1&&matching()[0].querySelector('.message-content')?.textContent==='panel live update','update dedupe');
+    result.liveUpdate=true;
+    await importRow('',{_discord_pb_deleted:true,_discord_pb_deleted_at:new Date().toISOString()});
+    await waitFor(()=>matching().length===1&&matching()[0].querySelector('.message-content')?.textContent==='(Deleted message)','tombstone');
+    result.liveTombstone=true;
+    return result;
+  }finally{
+    const query=new URLSearchParams({perPage:'2',filter:'message_id='+JSON.stringify(messageId)});
+    const records=await(await fetch('./api/collections/discord_messages/records?'+query,{headers})).json();
+    for(const record of records.items||[])await fetch('./api/collections/discord_messages/records/'+encodeURIComponent(record.id),{method:'DELETE',headers});
+    await loadMessages();
+  }
+})()`);
+Object.assign(checks,liveChecks);
+if(!checks.liveCreate||!checks.liveUpdate||!checks.liveTombstone)throw new Error('Panel realtime proof failed: '+JSON.stringify(checks));
+await js(`document.getElementById('model-tab').click()`);
 await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
 for(const [name,width] of [['desktop',1280],['mobile',390]]){
  await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});

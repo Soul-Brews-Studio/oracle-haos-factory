@@ -200,6 +200,24 @@ class Ingress(BaseHTTPRequestHandler):
         conn = HTTPConnection(os.environ["APP_HOST"], 8110, timeout=10)
         conn.request(self.command, self.path[len(prefix):], body=payload, headers=headers)
         response = conn.getresponse()
+        if response.getheader("Content-Type", "").startswith("text/event-stream"):
+            # Preserve streaming through the simulated HA ingress; buffering the
+            # entire body hides PB_CONNECT and deadlocks authenticated subscribe.
+            self.send_response(response.status)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            conn.sock.settimeout(330)
+            try:
+                while True:
+                    line = response.readline()
+                    if not line: break
+                    self.wfile.write(line); self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                pass
+            finally:
+                conn.close()
+            return
         body = response.read()
         self.send_response(response.status)
         for key, value in response.getheaders():
@@ -210,7 +228,7 @@ class Ingress(BaseHTTPRequestHandler):
         self.wfile.write(body)
         conn.close()
 
-    do_GET = do_POST = do_PATCH = proxy
+    do_GET = do_POST = do_PATCH = do_DELETE = proxy
 
     def log_message(self, *_):
         pass

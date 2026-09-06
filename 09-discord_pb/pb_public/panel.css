@@ -30,6 +30,7 @@ aside{display:grid;gap:24px;align-content:start}.hint,#page-label,footer{font-si
 .message-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;font-size:14px;color:var(--muted)}
 .message-meta strong{color:var(--ink)}
 .message-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}
+.deleted-message .message-content{color:var(--muted);font-style:italic}
 .message-ids{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .copy{background:transparent;color:var(--accent);font-size:13px;padding:4px 10px;min-height:36px;margin-top:6px}
 .secondary{background:transparent;color:var(--accent);font-size:13px;min-height:36px;padding:4px 10px}

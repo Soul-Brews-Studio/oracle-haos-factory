@@ -11,3 +11,8 @@
 !pb_migrations/**
 !pb_public/
 !pb_public/**
+
+!gateway.py
+!gateway_ws.py
+!rootfs/
+!rootfs/**

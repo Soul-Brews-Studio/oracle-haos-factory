@@ -16,6 +16,33 @@ const declaredModel = await dc.config();
 const rawYaml = await dc.configYaml();
 ```
 
+## Live messages
+
+```ts
+const live = dc.channel("arra-01").stream((record, action) => {
+  console.log(action, record.message_id, record.content);
+});
+await live.ready;
+// Later: live.close(); await live.done;
+```
+
+The stream uses PocketBase realtime with the PocketBase superuser/session token in
+the `Authorization` header; it never puts that token in the URL and never uses the
+Discord bot token. PocketBase realtime has no replay cursor, so this is a live,
+non-durable notification stream. After a disconnect the SDK reconnects and
+resubscribes, but consumers that require gap-free history should call `read({since})`.
+The callback receives `(record, action)`, where `action` is `create`, `update`, or
+`delete`; tombstoned Discord messages also have `raw._discord_pb_deleted === true`.
+Filtering matches `read()`: a channel handle excludes replies inside its child
+threads, while a thread handle emits only records whose `thread_id` is that thread.
+
+From a shell:
+
+```sh
+DC_URL=http://localhost:8110 DC_TOKEN="$POCKETBASE_TOKEN" \
+  bun sdk/cli.ts channel arra-01 tail
+```
+
 `channel(x)` and `guild(x)` accept an ID or name. The server resolves an exact
 name first, then a unique substring, and returns a clear ambiguity/not-found
 error otherwise. Handles do not cache resolved IDs.
@@ -40,6 +67,7 @@ export DC_TOKEN='a-pocketbase-or-ingress-session-token'
 bun sdk/cli.ts channels
 bun sdk/cli.ts guild 'Soul Brews' channels
 bun sdk/cli.ts channel general read --limit 20
+bun sdk/cli.ts channel general tail
 bun sdk/cli.ts channel general import
 bun sdk/cli.ts channel announcements post 'hello'
 bun sdk/cli.ts channel general thread 'Release' 'First post'

@@ -24,6 +24,8 @@ def options(path):
         raise ValueError("auto_login must be boolean")
     if type(data.get("auto_login_ha_admins", False)) is not bool:
         raise ValueError("auto_login_ha_admins must be boolean")
+    if type(data.get("live", True)) is not bool:
+        raise ValueError("live must be boolean")
     if type(data.get("allow_post", False)) is not bool:
         raise ValueError("allow_post must be boolean")
     for key in ("bot_token", "channels", "guilds", "post_channels", "admin_email", "admin_password", "auto_login_ha_user_ids"):
@@ -57,6 +59,15 @@ def main():
                DISCORD_PB_AUTO_LOGIN=str(config.get("auto_login", False)).lower(),
                DISCORD_PB_HA_ADMINS=str(config.get("auto_login_ha_admins", False)).lower(),
                DISCORD_PB_HA_USERS=config.get("auto_login_ha_user_ids") or "")
+    # Shared only with the separately supervised s6 Gateway process; never /data.
+    runtime = Path("/run/discord-pb")
+    runtime.mkdir(mode=0o700, exist_ok=True)
+    runtime.chmod(0o700)
+    token_file = runtime / "internal-token"
+    temporary_token = runtime / ".internal-token.tmp"
+    temporary_token.write_text(env["DISCORD_PB_INTERNAL_TOKEN"])
+    temporary_token.chmod(0o600)
+    temporary_token.replace(token_file)
     Path("/data/pb_data").mkdir(exist_ok=True)
     pb = subprocess.Popen(["/pb/pocketbase", "serve", "--http=0.0.0.0:8110", "--dir=/data/pb_data",
         "--hooksDir=/pb/pb_hooks", "--migrationsDir=/pb/pb_migrations", "--publicDir=/pb/pb_public",
@@ -121,6 +132,7 @@ def main():
                     due = time.monotonic() + config.get("poll_minutes", 60) * 60
             time.sleep(.2)
     finally:
+        token_file.unlink(missing_ok=True)
         stop()
         for child in (worker, pb):
             if child is not None:

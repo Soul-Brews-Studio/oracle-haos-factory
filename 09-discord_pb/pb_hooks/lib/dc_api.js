@@ -169,6 +169,42 @@ function runModel(app, operation, values) {
   }
 }
 
+// Cache the expensive Python compilation, not its authority. Every event compares
+// current raw YAML and model-relevant entity metadata; external edits,
+// invalid YAML and newly discovered threads invalidate immediately. Cache lives
+// in /run, is private/atomic, and is never a fallback after validation failure.
+function liveModel(app) {
+  const source = $os.getenv("DC_CONFIG_PATH") || "/data/dc.config.yaml"
+  let yaml
+  try { yaml = toString($os.readFile(source)) }
+  catch (_) {
+    // Directory enumeration distinguishes absence from an unreadable existing
+    // model, without forking Python for every legacy-selection message.
+    try {
+      const entries = $os.readDir($filepath.dir(source))
+      if (!entries.some((entry) => entry.name() === $filepath.base(source))) return {ok:true, exists:false}
+    } catch (_) {}
+    return getModel(app)
+  }
+  // Compare model-relevant data, not a coarse timestamp: two renames/updates
+  // within one millisecond must invalidate just as reliably as a new thread.
+  const key = JSON.stringify(modelEntities(app))
+  const cachePath = "/run/discord-pb/live-policy.json"
+  try {
+    const cache = JSON.parse(toString($os.readFile(cachePath)))
+    if (cache.yaml === yaml && cache.revision === key && cache.model && cache.model.ok === true) return cache.model
+  } catch (_) {}
+  const model = getModel(app)
+  if (model.ok) {
+    const temporary = cachePath + "." + $security.randomString(20)
+    try {
+      $os.writeFile(temporary, JSON.stringify({yaml, revision:key, model}), 0o600)
+      $os.rename(temporary, cachePath)
+    } finally { try { $os.remove(temporary) } catch (_) {} }
+  }
+  return model
+}
+
 function getModel(app) { return runModel(app, "get") }
 
 function entityRows(app, guildsOnly) {
@@ -235,6 +271,7 @@ function message(row) {
 }
 
 module.exports = Object.freeze({
+  liveModel,
   CHANNEL_KINDS, THREAD_TYPES, IMPORTABLE_TYPES, assertImportable, SNOWFLAKE, apiError, resolveEntity, validateRead,
   validateWrite, allowedToWrite, assertWritePolicy, discordBase, modelEntities, runModel, getModel,
   entityRows, selectedMap, options, jsonError, discord, message,

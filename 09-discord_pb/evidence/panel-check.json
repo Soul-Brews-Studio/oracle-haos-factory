@@ -19,5 +19,8 @@
   "rawYamlLoaded": true,
   "modelRoundTrip": true,
   "invalidYamlPreserved": true,
-  "yamlSaveRoundTrip": true
+  "yamlSaveRoundTrip": true,
+  "liveCreate": true,
+  "liveUpdate": true,
+  "liveTombstone": true
 }

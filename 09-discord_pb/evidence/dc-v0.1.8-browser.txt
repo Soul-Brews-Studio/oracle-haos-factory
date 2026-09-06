@@ -1,0 +1,3 @@
+{"refreshStatus":200,"protectedRecordsStatus":200,"records":214,"petkeeperAuthUnchanged":true,"petkeeperFileUnchanged":true,"discordKeyPresent":true,"ingressPrefixPreserved":true}
+Screenshot: /Users/beta/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb/evidence/admin-ingress.png
+

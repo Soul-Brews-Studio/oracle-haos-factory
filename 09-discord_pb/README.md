@@ -46,7 +46,7 @@ Port 8110 is **not published by default** (`ports: 8110/tcp: null`). If explicit
 published later, collection content still requires PocketBase superuser auth.
 `/api/discord/status` intentionally exposes only totals and channel names/IDs, never
 message content. `/api/discord/internal/upsert` requires both loopback peer and
-an ephemeral process-only credential. No other add-on or database is accessed.
+an ephemeral credential shared only under /run/discord-pb. No other add-on or database is accessed.
 
 Auto-login POST requires the actual ingress TCP peer (`172.30.32.2`), an ingress
 path, and an `X-Remote-User-Id` admitted by the explicit allowlist or the
@@ -104,7 +104,7 @@ prevents scheduled/manual cursor races. Per-channel failures are summarized,
 other configured channels continue, and the command exits nonzero on failures.
 
 429 body/header delays are honored without shortening; GET 5xx retries are
-bounded. Incremental polling does **not** discover edits/deletions of older
+bounded. Incremental polling alone does **not** discover edits/deletions of older
 messages or inaccessible/deleted channel history. Those can prevent parity
 with a historical SQLite archive and must be reported, not fabricated.
 
@@ -369,3 +369,83 @@ Official API contracts checked for this implementation:
 [PocketBase blocking HTTP](https://pocketbase.io/docs/js-sending-http-requests/),
 and [PocketBase subprocess execution](https://pocketbase.io/jsvm/functions/_os.cmd.html).
 The pin action uses the current `/channels/{id}/messages/pins/{messageId}` route.
+
+## Live feed — v0.1.8
+
+`live: true` (the default) runs a separate **s6-supervised Python Gateway service**.
+No `discord.py` or new Python dependency is used: the bounded raw WebSocket client
+is in `gateway_ws.py`. PocketBase and the REST reconciliation worker retain their
+existing supervisor. `live: false` leaves Gateway idle and preserves polling.
+Options load at process startup; changing the YAML model does not need restart.
+
+**Before enabling this build on kvmlab1:** Nat must enable **Message Content
+Intent** for the **Atlas Oracle** app in Discord Developer Portal → Bot →
+Privileged Gateway Intents. IDENTIFY requests `GUILDS | GUILD_MESSAGES |
+MESSAGE_CONTENT` (`33281`). A `4014` close is terminal and reports this setup hint;
+authentication/intent failures do not retry IDENTIFY in a tight loop. Gateway
+intents are separate from the bot's permissions to view individual rooms.
+[Discord Gateway intent documentation](https://docs.discord.com/developers/events/gateway#message-content-intent).
+
+Gateway `MESSAGE_CREATE`, partial `MESSAGE_UPDATE`, `MESSAGE_DELETE` and bulk
+message deletes go through the same transactional `message_id` upsert as REST.
+The live normalizer uses the same field mapping as backfill; field-presence
+merging is transactional, so omitted update fields are retained and an empty
+string remains a real edit. The effective model is re-read at each message:
+only `import: true` (or persisted selection without a model) is written. Invalid
+models fail closed. Unselected messages are counted, not archived.
+Guild/channel/thread create/update events keep **metadata** indexed for LIST
+FIRST, including unselected rooms; this does not grant message import or posting.
+
+No message schema migration is needed. Deletions preserve the archived record
+with `raw._discord_pb_deleted: true` and `_discord_pb_deleted_at`; the panel shows
+“Deleted message”. An unseen deletion still creates a durable tombstone. If its
+author is unknown, `author_id` is the literal **`unknown`**, never a fabricated
+Discord ID. Unseen partial updates similarly use `_discord_pb_partial` until a
+full message arrives. These are archive/audit records, not a claim that the
+message still exists on Discord.
+
+REST pages carry their fetch-start time. Older pages/edits cannot overwrite newer
+live edits, and no replay can resurrect a tombstone. `created_at` and routing
+fields remain intact. Gateway advances only its accepted dispatch sequence;
+**it never advances the REST watermark**. Disconnects request a reconciliation
+sweep, which uses the existing `after=` watermarks and unique index to fill new
+message gaps without duplicate rows. RESUME replays retained Gateway events;
+if the session expires, polling cannot recover old-message edits/deletions that
+occurred offline. That limitation is unchanged and is not a parity claim.
+
+`GET /api/dc/status` requires the existing ingress-minted **PB superuser token**
+or a manual PB superuser token, like all `/api/dc/*` endpoints. It returns
+`live_status` with `connected`, `session_id`, `last_event_age` (seconds/null),
+`events_per_minute`, received/stored/ignored counters, and a nonsecret error.
+A stale status file never reports connected. Status is private under `/data`;
+the ephemeral internal ingestion credential is shared via a `0600` file in a
+`0700` directory under **`/run/discord-pb`**, never committed or returned by API.
+
+The panel receives PocketBase `/api/realtime` SSE and updates/deduplicates visible
+rows immediately. Authentication occurs on the subscription request, never with
+the Discord bot token. After reconnect it refreshes the list because PB SSE has
+no durable replay cursor. SDK `channel(x).stream((record, action) => …)` and CLI
+`bun sdk/cli.ts channel arra-01 tail` use the same SSE protocol. Parent streams
+exclude child thread replies, matching `read()`; subscribe to the thread itself.
+[PB realtime API](https://pocketbase.io/docs/api-realtime/),
+[SDK/CLI details](sdk/README.md).
+
+### Lead-only deployment handoff (not executed by this task)
+
+The image changed; a restart alone does not install it. Preserve `/data` and the
+existing `bot_token`, credentials and autologin choices. Example **options patch**
+(not a replacement for the full existing Supervisor options object):
+
+```json
+{"live":true,"guilds":"Mini lab, Soul Brews - Brewing for Life","channels":"arra-01","poll_minutes":5,"allow_post":false,"post_channels":""}
+```
+
+```bash
+SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+rsync -az --exclude proof-local/ --exclude __pycache__/ \
+  "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
+ssh kvmlab1.oracle.netbird \
+  'ha store reload && ha apps update local_discord_pb && ha apps restart local_discord_pb'
+```
+
+No deployment, live options change, or Discord write was made during this task.

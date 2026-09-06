@@ -23,7 +23,9 @@ RUN python3 /app/namespace_admin.py /pb/pocketbase
 COPY pb_hooks/ /pb/pb_hooks/
 COPY pb_migrations/ /pb/pb_migrations/
 COPY pb_public/ /pb/pb_public/
-COPY backfill.py service.py dc_model.py /app/
+COPY backfill.py service.py dc_model.py gateway.py gateway_ws.py /app/
+COPY rootfs/ /
+RUN chmod 0755 /etc/services.d/discord-gateway/run
 COPY run.sh /run.sh
 RUN chmod 0755 /run.sh /app/backfill.py
 EXPOSE 8110

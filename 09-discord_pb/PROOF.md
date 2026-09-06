@@ -1,3 +1,85 @@
+# v0.1.8 — live Gateway in, PocketBase realtime out (2026-09-06)
+
+**PASS — local fixtures only. STOP before deployment.** No kvmlab1 source,
+options, restarts, tokens, or live Discord messages were changed in this task.
+Scope is `09-discord_pb/` on `lab/01-discord-pb-kvmlab1`.
+
+```text
+Python: 83 tests OK (14 fake Gateway protocol/regression tests)
+Live ingest: 38 assertions PASS
+DC API helper: 35 assertions PASS
+Bun SDK/CLI: 12 pass, 0 fail, 37 expects
+Strict TypeScript; JS syntax; Python compile; ShellCheck; diff checks: PASS
+Docker linux/arm64 and linux/amd64 builds: PASS
+LOCAL PROOF PASS
+LIVE PROOF PASS
+REALTIME PROBE PASS channel=Straße create update thread-filter tombstone
+PANEL PROOF PASS: liveCreate=true, liveUpdate=true, liveTombstone=true
+```
+
+### What the proof actually exercises
+
+- Default image `/init` starts the new legacy s6 `discord-gateway` service;
+  `live:false` publishes fresh disabled status while PB/poller continue normally.
+- Token-free fake HTTP `/gateway/bot` + real WebSocket HELLO/IDENTIFY/READY,
+  independent heartbeat/ACK, disconnect and accepted-sequence RESUME. Unit
+  cases additionally cover missing ACK, partial frame timeout, aggregate frame
+  bounds, saturated queue/no sequence hole, invalid-session queued-READY race,
+  fatal closes, identify quota, bootstrap retry and fixture-token rejection.
+- The listener calls **actual PB JSVM** ingestion under the effective YAML model.
+  Selected create/partial edit/delete are stored; an unselected thread message
+  is not. Invalid external YAML cannot reuse a cached allow set.
+- Deletes create durable tombstones (including unknown prior messages); duplicate
+  Gateway CREATE and stale REST replay cannot undo edits or resurrect deletes.
+  The message schema is unchanged. Partial message fields and JSON values survive
+  JSVM round trips; Node fixtures mimic PB JSONRaw byte wrappers, and a separate
+  regression compares live versus REST normalization field-by-field.
+- A message is created in the token-free REST fixture with **no Gateway dispatch**.
+  Disconnect wakes the real serialized poller; its `after=` sweep imports exactly
+  one missing row and advances only the relevant REST high-water mark. Synthetic
+  records, fixture changes, cursor and model are restored after the probe.
+- Actual authenticated PB SSE emits create/update/tombstone records. The Bun SDK
+  name handle subscribes to real PB (not mocked fetch), filters out child-thread
+  records for a parent handle, and cleans up its synthetic messages.
+- Browser simulated ingress now streams rather than buffering SSE. The panel
+  prepends a create without Refresh, replaces an update without duplicate rows,
+  and marks a tombstone. Initial subscription and reconnect refresh snapshots
+  to close SSE gaps. Model save/reload, mobile layout, and auth-isolation proofs
+  still pass; 214 fixture rows remain, both Petkeeper storage sentinels unchanged.
+- Independent high-risk review: **APPROVE** after fixing per-event model process
+  overhead (validated private cache), Gateway lifecycle races and UI subscription
+  gap. Cache keys include exact YAML and current model-relevant entity metadata.
+- Source SQLite main/WAL/SHM SHA256 unchanged. No source DB, neighbour add-on,
+  other listener, or live token store was modified.
+
+ARM64 ran the full container, SDK and browser fixture. AMD64 was built and the
+pinned PB version checked under emulation; native AMD64 runtime was not tested.
+The fixture is **not** a live Discord or real Supervisor-ingress claim. A lost
+Gateway session still cannot reconcile historical edits/deletions through an
+`after=` REST poll. Nat must enable the Atlas Oracle app's privileged **Message
+Content Intent** before lead deployment.
+
+Images:
+
+```text
+arm64 sha256:df983504f46cb4ebc7046a0983ee316751a6e37b1420dd6c3817b5ef8cc442f9
+amd64 sha256:eff4a8c88e09bc3b21b69603a775a3453d5c143d49ecbb52bf52979edf051f61
+```
+
+Evidence: [verification](evidence/dc-v0.1.8-verification.txt),
+[local/Gateway/SDK proof](evidence/dc-v0.1.8-local.txt),
+[admin browser](evidence/dc-v0.1.8-browser.txt),
+[panel live updates](evidence/dc-v0.1.8-panel.txt),
+[ARM64](evidence/dc-v0.1.8-build-arm64.txt),
+[AMD64](evidence/dc-v0.1.8-build-amd64.txt).
+Reproduce with `just verify`, the two README build commands, then
+`./tests/local-proof.sh --keep`, `./tests/browser-proof.sh`, and
+`./tests/panel-proof.sh`. Bun is required by the SDK probe; ego-browser by browser
+proofs. The exact rsync/update/restart and merge-safe options patch are in
+[README.md](README.md#lead-only-deployment-handoff-not-executed-by-this-task).
+
+---
+
 # v0.1.7 — declared channel model and handle API (2026-09-06)
 
 **PASS — committed source/local fixtures only; STOP before deployment.**

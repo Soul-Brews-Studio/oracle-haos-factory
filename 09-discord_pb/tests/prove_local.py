@@ -131,7 +131,7 @@ def main():
     os.chmod(temporary, 0o700)
     data_dir = temporary / "data"
     data_dir.mkdir()
-    config = {"auto_login": False, "auto_login_ha_admins": False, "auto_login_ha_user_ids": "proof-admin", "poll_minutes": 60,
+    config = {"live": False, "auto_login": False, "auto_login_ha_admins": False, "auto_login_ha_user_ids": "proof-admin", "poll_minutes": 60,
               "admin_email": "proof@example.test", "admin_password": secrets.token_urlsafe(32)}
     source = Path(os.environ.get("SQLITE_DB", SOURCE))
     before_hash = source_hashes(source)
@@ -324,6 +324,12 @@ def main():
                     headers={"X-Proof-User": "another-admin"})[0] == 200
         log("PASS auto_login off=403; direct/spoofed/non-allowlisted=403 with HA identity; allowlisted=200; panel-admin opt-in=200; no-store")
         log(command("docker", "exec", app, "python3", "/tests/dc_probe.py"))
+        log(command("docker", "exec", app, "python3", "/tests/live_probe.py"))
+        sdk_env = dict(os.environ, PB_URL=base, PB_SUPERUSER_TOKEN=auth()["Authorization"])
+        sdk = subprocess.run(["bun", "tests/realtime_probe.ts"], cwd=ROOT, env=sdk_env,
+                             capture_output=True, text=True, timeout=30)
+        assert sdk.returncode == 0, sdk.stdout + sdk.stderr
+        log(sdk.stdout.rstrip())
         after_hash = source_hashes(source)
         assert before_hash == after_hash, "Source archive changed during proof (could be external writer); rerun for integrity proof"
         log("PASS source DB/WAL/SHM SHA256 unchanged")
