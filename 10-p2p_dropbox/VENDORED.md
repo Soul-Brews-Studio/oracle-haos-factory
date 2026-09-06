@@ -74,3 +74,11 @@ f6ab8e43d43eb6249e5ac41deb0bda5de0668cc8b40139ccac6dadc3680489a9  dropbox/web-di
 9717f386ccd27632fc2ecf4937588fa165cbe81685b85a47cf71ac4e4ca790f5  dropbox/web-dist/index.html
 5b2326e5190de789f09e1a6266577ae127d974e16ba8fba63399187295a1dcc5  dropbox/web-dist/manifest.json
 ```
+
+### Registration update (0.1.2)
+
+Per-room registered name uniqueness (ID-TAKEN / close 1008), CLI/receiver ROOM
+query selection (default `default`), and web SDK room propagation are local
+vendor changes. No successful signaling message format changed. TURN options
+remain generic and optional; credentials stay in Supervisor options, never git.
+TURN: none in the fleet today; add a coturn add-on on kvmlab1 if relay is ever needed.

@@ -54,3 +54,11 @@ test("invalid auto-login booleans or user list fail closed", () => {
   }
   for (const auto_login_ha_user_ids of [[], "bad\nuser", "user.*", "x".repeat(129)]) expect(() => optionsEnvironment({...options(), auto_login_ha_user_ids})).toThrow();
 });
+
+test("room defaults migrate old options and validate configured room", () => {
+  expect(optionsEnvironment(options()).ROOM).toBe("default");
+  expect(optionsEnvironment({...options(), room: "lab-02"}).ROOM).toBe("lab-02");
+  for (const room of ["../other", "a/b", "a b", "x".repeat(65), 42]) {
+    expect(() => optionsEnvironment({...options(), room})).toThrow();
+  }
+});

@@ -240,7 +240,11 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
+const ROOM = sanitizeRoom(process.env.ROOM);
+if (!ROOM) throw new Error("Invalid ROOM");
+
 app.get("/api/config", (c) => c.json({
+  room: ROOM,
   iceServers: ICE_SERVERS,
   max_file_mb: MAX_FILE_MB,
   http_max_file_mb: HTTP_MAX_FILE_SIZE / 1024 / 1024,
@@ -365,7 +369,7 @@ Bun.serve<WsData>({
         verifyIngressToken(url.searchParams.get("token") || "", AUTH_KEY,
           identity, "signal", INGRESS_POLICY);
       if (!authorized) return new Response("unauthorized", { status: 401 });
-      const room = sanitizeRoom(url.searchParams.get("room"));
+      const room = sanitizeRoom(url.searchParams.get("room") ?? ROOM);
       if (!room) return new Response("invalid room", { status: 400 });
       if (server.upgrade(req, { data: { id: crypto.randomUUID(), room } })) return;
       return new Response("WebSocket upgrade failed", { status: 500 });

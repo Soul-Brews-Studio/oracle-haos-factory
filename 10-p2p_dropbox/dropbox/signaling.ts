@@ -14,6 +14,7 @@ export interface SignalingSocket {
 interface PeerRecord {
   socket: SignalingSocket;
   name: string;
+  identified: boolean;
   lastSeen: number;
 }
 
@@ -25,7 +26,7 @@ export class SignalingHub {
 
   connect(room: string, id: string, socket: SignalingSocket): void {
     const peers = this.room(room);
-    peers.set(id, { socket, name: "anonymous", lastSeen: this.now() });
+    peers.set(id, { socket, name: "anonymous", identified: false, lastSeen: this.now() });
     this.send(socket, { type: "welcome", id, peers: peers.size });
     this.broadcast(room, { type: "peer-joined", id, total: peers.size }, id);
   }
@@ -48,7 +49,22 @@ export class SignalingHub {
       case "pong":
         return;
       case "identify": {
-        peer.name = sanitizePeerName(message.name);
+        const name = sanitizePeerName(message.name);
+        const incumbent = [...peers].find(([peerId, record]) =>
+          peerId !== id && record.identified && record.name === name
+        );
+        if (incumbent) {
+          this.send(peer.socket, {
+            type: "error",
+            code: "ID-TAKEN",
+            message: `Peer name '${name}' is already registered in this room`,
+          } as SignalingMessage & { code: string; message: string });
+          this.disconnect(room, id);
+          try { peer.socket.close(1008, "ID-TAKEN"); } catch {}
+          return;
+        }
+        peer.name = name;
+        peer.identified = true;
         this.broadcast(room, { type: "peer-identified", id, name: peer.name }, id);
         return;
       }
@@ -130,7 +146,7 @@ export class SignalingHub {
 }
 
 export function sanitizeRoom(value: string | null): string | null {
-  const room = (value || "dropbox").trim() || "dropbox";
+  const room = (value || "default").trim() || "default";
   return /^[A-Za-z0-9_.-]{1,64}$/.test(room) ? room : null;
 }
 

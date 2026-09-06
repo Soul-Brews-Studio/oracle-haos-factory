@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createScopedToken, SignalingHub, sanitizeRoom, verifyScopedToken } from "./signaling";
+import { createScopedToken, SignalingHub, sanitizeRoom, verifyScopedToken, ZOMBIE_TIMEOUT_MS } from "./signaling";
 
 class FakeSocket {
   readyState = 1;
@@ -44,6 +44,106 @@ describe("SignalingHub", () => {
     expect(other.sent).toEqual([]);
   });
 
+  test("rejects a duplicate identified name without disturbing the incumbent", () => {
+    const hub = new SignalingHub(() => 0);
+    const incumbent = new FakeSocket(), duplicate = new FakeSocket();
+    hub.connect("dropbox", "incumbent", incumbent);
+    hub.connect("dropbox", "duplicate", duplicate);
+    incumbent.take(); duplicate.take();
+
+    hub.receive("dropbox", "incumbent", JSON.stringify({ type: "identify", name: "p2p-dropbox" }));
+    incumbent.take();
+    duplicate.take();
+    hub.receive("dropbox", "duplicate", JSON.stringify({ type: "identify", name: "p2p-dropbox" }));
+
+    expect(duplicate.take()).toEqual([{
+      type: "error",
+      code: "ID-TAKEN",
+      message: "Peer name 'p2p-dropbox' is already registered in this room",
+    }]);
+    expect(duplicate.closed).toEqual({ code: 1008, reason: "ID-TAKEN" });
+    expect(hub.peerCount("dropbox")).toBe(1);
+    expect(incumbent.closed).toBeUndefined();
+    hub.receive("dropbox", "incumbent", JSON.stringify({ type: "list-peers" }));
+    expect(incumbent.sent.at(-1)).toEqual({
+      type: "peer-list",
+      peers: [{ id: "incumbent", name: "p2p-dropbox" }],
+    });
+  });
+
+  test("checks uniqueness after sanitizing names", () => {
+    const hub = new SignalingHub(() => 0);
+    const incumbent = new FakeSocket(), duplicate = new FakeSocket();
+    hub.connect("dropbox", "a", incumbent);
+    hub.connect("dropbox", "b", duplicate);
+    incumbent.take(); duplicate.take();
+
+    hub.receive("dropbox", "a", JSON.stringify({ type: "identify", name: " receiver " }));
+    incumbent.take();
+    hub.receive("dropbox", "b", JSON.stringify({ type: "identify", name: "\u0000receiver\u007f" }));
+
+    expect(duplicate.sent.at(-1)).toMatchObject({ type: "error", code: "ID-TAKEN" });
+    expect(duplicate.closed).toEqual({ code: 1008, reason: "ID-TAKEN" });
+  });
+
+  test("allows the same peer to reidentify with its own name and the same name in another room", () => {
+    const hub = new SignalingHub(() => 0);
+    const first = new FakeSocket(), otherRoom = new FakeSocket();
+    hub.connect("alpha", "a", first);
+    hub.connect("beta", "b", otherRoom);
+    first.take(); otherRoom.take();
+
+    hub.receive("alpha", "a", JSON.stringify({ type: "identify", name: "sender" }));
+    hub.receive("alpha", "a", JSON.stringify({ type: "identify", name: "sender" }));
+    hub.receive("beta", "b", JSON.stringify({ type: "identify", name: "sender" }));
+
+    expect(first.closed).toBeUndefined();
+    expect(otherRoom.closed).toBeUndefined();
+    expect(hub.peerCount("alpha")).toBe(1);
+    expect(hub.peerCount("beta")).toBe(1);
+  });
+
+  test("does not reserve anonymous names until identify and releases names on rename and disconnect", () => {
+    const hub = new SignalingHub(() => 0);
+    const anonymousA = new FakeSocket(), anonymousB = new FakeSocket();
+    hub.connect("dropbox", "anon-a", anonymousA);
+    hub.connect("dropbox", "anon-b", anonymousB);
+    expect(hub.peerCount("dropbox")).toBe(2);
+
+    hub.receive("dropbox", "anon-a", JSON.stringify({ type: "identify", name: "first" }));
+    hub.receive("dropbox", "anon-a", JSON.stringify({ type: "identify", name: "renamed" }));
+    const claimant = new FakeSocket();
+    hub.connect("dropbox", "claimant", claimant);
+    claimant.take();
+    hub.receive("dropbox", "claimant", JSON.stringify({ type: "identify", name: "first" }));
+    expect(claimant.closed).toBeUndefined();
+
+    hub.disconnect("dropbox", "anon-a");
+    const successor = new FakeSocket();
+    hub.connect("dropbox", "successor", successor);
+    successor.take();
+    hub.receive("dropbox", "successor", JSON.stringify({ type: "identify", name: "renamed" }));
+    expect(successor.closed).toBeUndefined();
+  });
+
+  test("releases an identified name when heartbeat removes a zombie", () => {
+    let now = 0;
+    const hub = new SignalingHub(() => now);
+    const zombie = new FakeSocket();
+    hub.connect("dropbox", "zombie", zombie);
+    zombie.take();
+    hub.receive("dropbox", "zombie", JSON.stringify({ type: "identify", name: "receiver" }));
+
+    now = ZOMBIE_TIMEOUT_MS + 1;
+    expect(hub.heartbeat()).toBe(1);
+    const successor = new FakeSocket();
+    hub.connect("dropbox", "successor", successor);
+    successor.take();
+    hub.receive("dropbox", "successor", JSON.stringify({ type: "identify", name: "receiver" }));
+
+    expect(successor.closed).toBeUndefined();
+  });
+
   test("ignores malformed and non-object JSON messages without disconnecting", () => {
     const hub = new SignalingHub(() => 0);
     const peer = new FakeSocket();
@@ -74,7 +174,7 @@ describe("SignalingHub", () => {
 });
 
 test("room names are bounded and default safely", () => {
-  expect(sanitizeRoom(null)).toBe("dropbox");
+  expect(sanitizeRoom(null)).toBe("default");
   expect(sanitizeRoom("lab-1")).toBe("lab-1");
   expect(sanitizeRoom("../escape")).toBeNull();
 });

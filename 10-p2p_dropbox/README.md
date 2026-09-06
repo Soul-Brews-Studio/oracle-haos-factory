@@ -44,6 +44,7 @@ Replace the placeholder locally in Supervisor, never in git:
   "auto_login": true,
   "auto_login_ha_admins": true,
   "auto_login_ha_user_ids": "",
+  "room": "default",
   "save_dir": "/share/p2p",
   "stun_servers": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],
   "max_file_mb": 1024,
@@ -204,10 +205,10 @@ Backend typecheck uses the existing TypeScript toolchain (`tsc --noEmit` from th
 Shell static analysis: `shellcheck run.sh verify.sh rootfs/etc/cont-init.d/* rootfs/etc/services.d/*/run`.
 A loopback-only ingress test proxy lives at `tests/ingress-proxy.ts`.
 
-## Known limits / remaining install gate
+## Known limits
 
-- **No kvmlab1 installation or real HA sidebar validation in this lab.** Nat's key
-  and explicit install authorization are still required for that next stage.
+- kvmlab1 is installed; independent deployment/API/CLI proof is recorded in
+  DOCS.md and evidence/. Real authenticated HA browser proof remains separate.
 - Local host-to-Docker and bridge P2P are not proof of the real kvmlab1 LAN/NetBird
   topology or TURN. An initial host timeout exposed an early-ICE/SDP-ordering bug;
   after the fix, the Mac-host → Colima add-on transfer succeeds with STUN disabled.
@@ -220,7 +221,8 @@ A loopback-only ingress test proxy lives at `tests/ingress-proxy.ts`.
 - UI/senders retain shared-key peer trust, not individual user permissions. Anyone
   with the master key can upload/download, list peers and impersonate a peer name.
   The browser is sender-only and exposes only the exact configured receiver name.
-  Duplicate receiver names are not auto-selected; the key is not an identity system.
+  Registered names are now unique per room (ID-TAKEN); first-claim impersonation
+  remains possible with a shared key. The key is not an identity system.
 - Atomic `.part` staging prevents partial files being presented as complete. A hard
   kill/power loss can leave hidden `.part` files for manual recovery; no automatic
   deletion of user files or other add-on data is performed.
@@ -237,3 +239,30 @@ Upstream provenance and bounded vendor changes: [VENDORED.md](VENDORED.md).
   server. `INGRESS_TRUSTED_PEER` / `HA_CORE_WS_URL` are runtime-only test overrides,
   not Supervisor options; do not override them in deployment.
 - Fresh dual-arch build, CLI hash and regression evidence: `evidence/autologin/`.
+
+## Rooms and peer registration (0.1.2)
+
+`ROOM=default` selects the CLI/receiver room; an explicit `ROOM` overrides
+`SIGNAL_URL`'s `?room=`. Without either, the room is `default` (previous implicit
+room was `dropbox`). Names allow 1–64 ASCII letters, digits, `.`, `_`, `-`.
+The add-on's optional `room` setting defaults to `default`, sets both server and
+receiver `ROOM`, and is returned by authenticated `/api/config` to the web SDK.
+Use the same room on both ends. Restart old clients after upgrading; explicitly
+selected old rooms are not merged. Web SDK URLs carry the configured `?room=`.
+
+Names are unique **within a room after sanitization**. A duplicate identify gets
+`{"type":"error","code":"ID-TAKEN",...}` and close 1008; the incumbent stays.
+Give each simultaneous process a different `PEER_NAME`, including listers.
+Disconnect, rename and zombie cleanup release the name. Rooms separate signaling,
+not authorization or HTTP file storage: all holders of the shared key can select
+any room and access the same HTTP files. The service is single-process/in-memory.
+
+TURN: none in the fleet today; add a coturn add-on on kvmlab1 if relay is ever needed.
+Leave `turn_url`, `turn_user`, `turn_pass` empty. For any future authorized coturn,
+set all three through Supervisor options only. They map to `TURN_URLS`, `TURN_USER`,
+`TURN_CRED` for the receiver and to the authenticated web ICE configuration;
+standalone CLI peers set those same env vars privately. No demo credentials or
+relay hosts are bundled. Config wiring is tested; actual TURN connectivity is not.
+
+See [the executable join recipe](DOCS.md#join-from-a-new-machine) and
+[MAW client helpers](client/maw-dropbox/README.md).

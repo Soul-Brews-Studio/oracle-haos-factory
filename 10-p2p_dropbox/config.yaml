@@ -1,5 +1,5 @@
 name: "P2P Dropbox"
-version: "0.1.1"
+version: "0.1.2"
 slug: "p2p_dropbox"
 description: "Self-contained WebRTC dropbox, local signaling and HTTP fallback."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/02-p2p-dropbox-kvmlab1/10-p2p_dropbox"
@@ -27,6 +27,7 @@ options:
   auto_login_ha_admins: true
   auto_login_ha_user_ids: ""
   auth_key: ""
+  room: default
   save_dir: /share/p2p
   stun_servers:
     - stun:stun.l.google.com:19302
@@ -40,6 +41,7 @@ schema:
   auto_login_ha_admins: bool
   auto_login_ha_user_ids: str?
   auth_key: password?
+  room: str?
   save_dir: str
   stun_servers:
     - str

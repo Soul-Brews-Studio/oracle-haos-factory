@@ -1,0 +1,46 @@
+/package/admin/s6-overlay/libexec/preinit: info: container permissions: uid=0 (root), euid=0, gid=0 (root), egid=0
+/package/admin/s6-overlay/libexec/preinit: info: /run permissions: uid=0 (root), gid=0 (root), perms=oxorgxgruxuwur
+s6-rc: info: service s6rc-oneshot-runner: starting
+s6-rc: info: service s6rc-oneshot-runner successfully started
+s6-rc: info: service fix-attrs: starting
+s6-rc: info: service fix-attrs successfully started
+s6-rc: info: service legacy-cont-init: starting
+cont-init: info: running /etc/cont-init.d/10-p2p-options
+p2p_dropbox: options validated; starting authenticated server and receiver
+cont-init: info: /etc/cont-init.d/10-p2p-options exited 0
+s6-rc: info: service legacy-cont-init successfully started
+s6-rc: info: service legacy-services: starting
+services-up: info: copying legacy longrun p2p-receiver (no readiness notification)
+services-up: info: copying legacy longrun p2p-server (no readiness notification)
+P2P Dropbox listening on 0.0.0.0:3847; uploads: /share/p2p; max: 1 MB
+s6-rc: info: service legacy-services successfully started
+[2026-09-06T06:34:30.686Z]
+╔══════════════════════════════════════════╗
+║  🛰️  PhD Dropbox — P2P Receiver         ║
+║                                          ║
+║  Name:     p2p-dropbox                 ║
+║  Save dir: /share/p2p                  ║
+║  Signal:   ws://127.0.0.1:3847         ║
+║                                          ║
+║  Waiting for peers to send files...      ║
+╚══════════════════════════════════════════╝
+
+[2026-09-06T06:34:30.686Z] Connecting to signaling: ws://127.0.0.1:3847/ws
+[2026-09-06T06:34:30.691Z] Signaling connected
+[2026-09-06T06:34:30.691Z] Connected (e0f7a466-b986-4915-b068-189867652294); identifying as p2p-dropbox
+[2026-09-06T06:34:30.691Z] Registered as p2p-dropbox
+[2026-09-06T06:34:30.691Z] Peers online: p2p-dropbox
+[AUTH_FAIL] GET /api/files (local)
+[2026-09-06T06:34:34.974Z] Peer joined: cli-1334-vz0r (a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf)
+[2026-09-06T06:34:35.032Z] Offer from a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf
+[2026-09-06T06:34:35.113Z] ICE state [a7bfa36c]: completed
+[2026-09-06T06:34:35.113Z] ICE state [a7bfa36c]: checking
+[2026-09-06T06:34:35.115Z] Answer sent to a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf
+[2026-09-06T06:34:35.135Z] ICE state [a7bfa36c]: connected
+[2026-09-06T06:34:35.269Z] DataChannel open with a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf
+[2026-09-06T06:34:35.291Z] Saved: /share/p2p/2026-09-06/2026-09-06T06-34-35-272Z_zyk7uyu1_p2p-fixture.bin (0.2 MB) from cli-1334-vz0r
+[LIST] 1 files (local)
+[2026-09-06T06:34:35.796Z] Peer left: a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf (total: 1)
+[2026-09-06T06:34:35.797Z] DataChannel closed with a7bfa36c-979f-4b2c-a5bc-21cd01fed4cf
+[2026-09-06T06:34:35.797Z] ICE state [a7bfa36c]: closed
+[UPLOAD] 2026-09-06/2026-09-06-06-34-35_http-fixture.txt (26 bytes) (local)

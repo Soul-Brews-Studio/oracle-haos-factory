@@ -30,6 +30,7 @@ function endpoint(path: string): string {
 }
 
 export interface AppConfig {
+  room?: string;
   iceServers: RTCIceServer[];
   max_file_mb: number;
   http_max_file_mb?: number;
@@ -181,9 +182,11 @@ export async function fetchPreview(name: string): Promise<PreviewData> {
   return data;
 }
 
-export function signalingWsUrl(token: string): string {
+export function signalingWsUrl(token: string, room = "default"): string {
   const url = new URL("ws", document.baseURI);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(room)) throw new Error("Invalid signaling room");
+  url.searchParams.set("room", room);
   url.searchParams.set("token", token);
   return url.toString();
 }

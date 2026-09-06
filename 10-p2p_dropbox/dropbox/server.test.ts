@@ -46,6 +46,7 @@ describe("server", () => {
     expect(response.status).toBe(200);
     const config = await response.json();
     expect(config).toMatchObject({
+      room: "default",
       max_file_mb: 1,
       http_max_file_mb: 1,
       receiver_peer_name: "p2p-dropbox",

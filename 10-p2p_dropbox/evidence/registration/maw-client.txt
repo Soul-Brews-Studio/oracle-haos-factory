@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-09-06T06:37:24.431Z",
+  "files": 15,
+  "bytes": 7323732,
+  "mib": 6.98,
+  "named_senders": 6,
+  "latest": "2026-09-06T06:21:14.836Z"
+}
+http://kvmlab1.oracle.netbird/hassio/ingress/local_p2p_dropbox
+P2P Dropbox (NetBird VPN required)
+Dashboard: http://kvmlab1.oracle.netbird/hassio/ingress/local_p2p_dropbox
+Direct: http://kvmlab1.oracle.netbird:3847
+Receiver: p2p-dropbox
+Send: maw dropbox send --to "p2p-dropbox" /absolute/path/file
+HTTP <=32 MiB: maw dropbox send --http /absolute/path/file
+Supply AUTH_KEY privately; never attach it to a URL. These are service links, not anonymous per-file links.

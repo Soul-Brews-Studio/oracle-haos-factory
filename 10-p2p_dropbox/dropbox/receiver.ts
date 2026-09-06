@@ -6,6 +6,8 @@ import type { SignalingPeer, SdpPayload, RTCIceCandidateJSON } from "./types";
 import { ReceiverTransferSession, TransferRegistry } from "./transfer";
 import { gatheredLocalDescription } from "./negotiation";
 
+import { signalingClientUrl } from "./client-url";
+
 const SIGNAL_URL = process.env.SIGNAL_URL || "ws://127.0.0.1:3847/ws";
 const AUTH_KEY = process.env.AUTH_KEY || "";
 if (!AUTH_KEY.trim()) throw new Error("AUTH_KEY is required");
@@ -66,9 +68,7 @@ let shuttingDown = false;
 const transferSessions = new Set<ReceiverTransferSession>();
 
 function signalingUrl(): string {
-  const url = new URL(SIGNAL_URL);
-  url.searchParams.set("key", AUTH_KEY);
-  return url.toString();
+  return signalingClientUrl(SIGNAL_URL, AUTH_KEY, process.env.ROOM);
 }
 
 function configuredIceServers() {
@@ -115,7 +115,7 @@ const transferRegistry = new TransferRegistry({
 });
 
 function connectSignaling() {
-  log(`Connecting to signaling: ${SIGNAL_URL}`);
+  log(`Connecting to signaling: ${new URL(SIGNAL_URL).origin}/ws`);
   ws = new WebSocket(signalingUrl());
 
   ws.onopen = () => {
@@ -127,16 +127,23 @@ function connectSignaling() {
     const msg = JSON.parse(String(event.data));
 
     switch (msg.type) {
+      case "error":
+        if (msg.code === "ID-TAKEN") {
+          log("ID-TAKEN: peer name already registered in this room; choose a different PEER_NAME");
+          process.exit(1);
+        }
+        break;
       case "ping":
         ws.send(JSON.stringify({ type: "pong" }));
         break;
       case "welcome":
         myId = msg.id;
-        log(`Registered as ${PEER_NAME} (${myId}) — ${msg.peers} peers online`);
+        log(`Connected (${myId}); identifying as ${PEER_NAME}`);
         ws.send(JSON.stringify({ type: "list-peers" }));
         break;
 
       case "peer-list":
+        if (msg.peers.some((p: SignalingPeer) => p.id === myId && p.name === PEER_NAME)) log(`Registered as ${PEER_NAME}`);
         for (const p of msg.peers as SignalingPeer[]) peerNames.set(p.id, p.name);
         log(`Peers online: ${msg.peers.map((p: SignalingPeer) => p.name).join(", ")}`);
         break;
@@ -281,7 +288,7 @@ log(`
 ║                                          ║
 ║  Name:     ${PEER_NAME.padEnd(28)}║
 ║  Save dir: ${SAVE_DIR.slice(-28).padEnd(28)}║
-║  Signal:   ${SIGNAL_URL.slice(0, 28).padEnd(28)}║
+║  Signal:   ${new URL(SIGNAL_URL).origin.slice(0, 28).padEnd(28)}║
 ║                                          ║
 ║  Waiting for peers to send files...      ║
 ╚══════════════════════════════════════════╝

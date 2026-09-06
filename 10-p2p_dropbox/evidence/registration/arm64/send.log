@@ -1,0 +1,13 @@
+[06:34:34] Connecting to signaling...
+[06:34:34] Connected as "cli-1334-vz0r" (2 peers online)
+[06:34:34] Found target: p2p-dropbox (e0f7a466)
+[06:34:34] Offer sent to target
+[06:34:35] P2P DataChannel open — sending files...
+[06:34:35] Sending: p2p-fixture.bin (192.1 KB)
+
+  33% (64.0 KB / 192.1 KB)
+  67% (128.0 KB / 192.1 KB)
+  100% (192.0 KB / 192.1 KB)
+  100% (192.1 KB / 192.1 KB)
+[06:34:35] Delivered: p2p-fixture.bin (192.1 KB confirmed by receiver)
+[06:34:35] Done: 1 delivered, 0 failed

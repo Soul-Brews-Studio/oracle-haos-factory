@@ -1,0 +1,17 @@
+/package/admin/s6-overlay/libexec/preinit: info: container permissions: uid=0 (root), euid=0, gid=0 (root), egid=0
+/package/admin/s6-overlay/libexec/preinit: info: /run permissions: uid=0 (root), gid=0 (root), perms=oxorgxgruxuwur
+s6-rc: info: service s6rc-oneshot-runner: starting
+s6-rc: info: service s6rc-oneshot-runner successfully started
+s6-rc: info: service fix-attrs: starting
+s6-rc: info: service fix-attrs successfully started
+s6-rc: info: service legacy-cont-init: starting
+cont-init: info: running /etc/cont-init.d/10-p2p-options
+FATAL p2p_dropbox options: auth_key is required; Nat must set it via add-on options
+cont-init: info: /etc/cont-init.d/10-p2p-options exited 1
+cont-init: warning: some scripts exited nonzero
+s6-rc: warning: unable to start service legacy-cont-init: command exited 1
+/run/s6/basedir/scripts/rc.init: warning: s6-rc failed to properly bring all the services up! Check your logs (in /run/uncaught-logs/current if you have in-container logging) for more information.
+/run/s6/basedir/scripts/rc.init: fatal: stopping the container.
+s6-rc: info: service fix-attrs: stopping
+s6-rc: info: service fix-attrs successfully stopped
+s6-rc: warning: service s6rc-oneshot-runner is marked as essential, not stopping it

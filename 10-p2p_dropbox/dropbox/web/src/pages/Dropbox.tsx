@@ -104,7 +104,7 @@ export default function Dropbox({ config, onAuthFailed }: Props) {
       addLog("Signaling unavailable: server did not provide a scoped token");
       return;
     }
-    const client = new SignalingClient(signalingWsUrl(config.signal_token), (e: SignalingEvent) => {
+    const client = new SignalingClient(signalingWsUrl(config.signal_token, config.room), (e: SignalingEvent) => {
       switch (e.type) {
         case "connected": setStatus("signaling"); break;
         case "disconnected": setStatus("disconnected"); break;
@@ -137,12 +137,12 @@ export default function Dropbox({ config, onAuthFailed }: Props) {
     }, myPeerName, config.iceServers, receiverPeerName, async () => {
       const fresh = await validateApiKey(getApiKey());
       if (!fresh.signal_token) throw new Error("Server did not provide a scoped signaling token");
-      return signalingWsUrl(fresh.signal_token);
+      return signalingWsUrl(fresh.signal_token, fresh.room);
     });
     client.connect();
     clientRef.current = client;
     return () => client.disconnect();
-  }, [addLog, config.iceServers, config.signal_token, myPeerName, onAuthFailed, receiverPeerName, refreshFiles]);
+  }, [addLog, config.room, config.iceServers, config.signal_token, myPeerName, onAuthFailed, receiverPeerName, refreshFiles]);
 
   const handleSelectPeer = useCallback((peerId: string) => {
     const client = clientRef.current;

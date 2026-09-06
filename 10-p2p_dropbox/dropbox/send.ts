@@ -5,6 +5,8 @@ import { basename } from "path";
 import { generatePeerName, type SignalingPeer } from "./types";
 import { gatheredLocalDescription } from "./negotiation";
 
+import { signalingClientUrl } from "./client-url";
+
 const SIGNAL_URL = process.env.SIGNAL_URL || "ws://127.0.0.1:3847/ws";
 const AUTH_KEY = process.env.AUTH_KEY || "";
 const PEER_NAME = process.env.PEER_NAME || generatePeerName("cli");
@@ -58,6 +60,8 @@ for (let i = 0; i < rawArgs.length; i++) {
     bun run send.ts --list                         List online peers
 
   Env:
+    SIGNAL_URL=ws://host:3847/ws  Local signaling endpoint
+    ROOM=default             Room (overrides SIGNAL_URL ?room=)
     AUTH_KEY=phd-xxx          Signaling auth key (required)
     PEER_NAME=my-oracle       Your peer name (default: cli-HHMM-hash)
     DEFAULT_PEER=p2p-dropbox  Target for bare send (no --to)
@@ -107,9 +111,7 @@ function log(msg: string) {
 const DEFAULT_PEER = process.env.DEFAULT_PEER || "p2p-dropbox";
 
 function signalingUrl(): string {
-  const url = new URL(SIGNAL_URL);
-  url.searchParams.set("key", AUTH_KEY);
-  return url.toString();
+  return signalingClientUrl(SIGNAL_URL, AUTH_KEY, process.env.ROOM);
 }
 
 function configuredIceServers() {
@@ -272,6 +274,12 @@ async function run() {
     const msg = JSON.parse(String(event.data));
 
     switch (msg.type) {
+      case "error":
+        if (msg.code === "ID-TAKEN") {
+          log("ID-TAKEN: peer name already registered in this room; choose a different PEER_NAME");
+          process.exit(1);
+        }
+        break;
       case "ping":
         ws.send(JSON.stringify({ type: "pong" }));
         break;

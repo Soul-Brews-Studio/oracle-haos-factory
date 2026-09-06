@@ -72,6 +72,12 @@ export class SignalingClient {
     this.ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       switch (msg.type) {
+        case "error":
+          if (msg.code === "ID-TAKEN") {
+            this.onEvent({ type: "log", msg: "ID-TAKEN: peer name already registered; choose a different name and reconnect" });
+            this.disconnect();
+          }
+          break;
         case "ping":
           this.ws?.send(JSON.stringify({ type: "pong" }));
           this.dbg("ws", "in", `← ping`);

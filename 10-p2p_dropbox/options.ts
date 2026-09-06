@@ -1,6 +1,8 @@
 import { mkdirSync, realpathSync, writeFileSync, chmodSync, lstatSync, existsSync } from "node:fs";
 import { resolve, sep, join } from "node:path";
 
+import { sanitizeRoom } from "./dropbox/signaling";
+
 const DEFAULT_STUN = ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"];
 function text(value: unknown, name: string): string {
   if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${name} must be a single-line string`);
@@ -21,6 +23,8 @@ export function optionsEnvironment(value: unknown): Record<string, string> {
   if (autoUsers.length > 16384 || !autoUsers.split(",").every(id => !id.trim() || /^[A-Za-z0-9_-]{1,128}$/.test(id.trim()))) {
     throw new Error("auto_login_ha_user_ids must be comma-separated HA user IDs");
   }
+  const room = sanitizeRoom(text(o.room ?? "default", "room"));
+  if (!room) throw new Error("room must contain 1-64 letters, digits, dots, underscores or hyphens");
   const save = text(o.save_dir ?? "/share/p2p", "save_dir");
   if (!save.startsWith("/share/") || resolve(save) !== save || save === "/share/") throw new Error("save_dir must be a normalized subdirectory of /share");
   const max = o.max_file_mb ?? 1024;
@@ -36,7 +40,7 @@ export function optionsEnvironment(value: unknown): Record<string, string> {
   return {
     AUTH_KEY: auth, SAVE_DIR: save, UPLOAD_DIR: save, LOG_DIR: "/data/logs",
     HOST: "0.0.0.0", PORT: "3847", SIGNAL_URL: "ws://127.0.0.1:3847/ws",
-    PEER_NAME: "p2p-dropbox", DEFAULT_PEER: "p2p-dropbox", MAX_FILE_MB: String(max),
+    ROOM: room, PEER_NAME: "p2p-dropbox", DEFAULT_PEER: "p2p-dropbox", MAX_FILE_MB: String(max),
     STUN_SERVERS: JSON.stringify(stun), TURN_URLS: turn, TURN_USER: user, TURN_CRED: pass,
     AUTO_LOGIN: String(autoLogin), AUTO_LOGIN_HA_ADMINS: String(autoAdmins), AUTO_LOGIN_HA_USER_IDS: autoUsers,
   };

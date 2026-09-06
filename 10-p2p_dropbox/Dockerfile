@@ -5,7 +5,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.22
 FROM oven/bun:1.3.14-alpine AS bun
 FROM ${BUILD_FROM}
 ARG BUILD_ARCH=amd64
-ARG BUILD_VERSION=0.1.1
+ARG BUILD_VERSION=0.1.2
 LABEL io.hass.type="addon" io.hass.arch="${BUILD_ARCH}" io.hass.version="${BUILD_VERSION}"
 RUN apk add --no-cache libstdc++ libgcc ca-certificates
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
