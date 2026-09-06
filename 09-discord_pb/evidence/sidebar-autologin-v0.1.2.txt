@@ -1,0 +1,11 @@
+Local ingress proof v0.1.2
+PASS auto_login off=403; direct/spoofed/non-allowlisted=403 with HA identity; allowlisted=200; panel-admin opt-in=200; no-store
+{
+  "refreshStatus": 200,
+  "protectedRecordsStatus": 200,
+  "records": 214,
+  "petkeeperAuthUnchanged": true,
+  "petkeeperFileUnchanged": true,
+  "discordKeyPresent": true,
+  "ingressPrefixPreserved": true
+}

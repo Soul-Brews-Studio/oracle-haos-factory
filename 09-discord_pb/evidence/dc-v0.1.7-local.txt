@@ -1,0 +1,48 @@
+SOURCE rows=263631 channels=214
+PASS default /init -> /run.sh -> service.py -> scheduled backfill (no bot token)
+PASS 13 source columns preserved + private rules + exact archive message IDs
+VERIFY COMMAND: CHANNELS=1485581352354054215,1500433583255457863,1515643997828153476 PB_URL=http://127.0.0.1:64862 SQLITE_DB=/opt/Code/github.com/Soul-Brews-Studio/atlas-oracle/.maw/atlas-route/messages.sqlite ./verify.sh
+name channel_id sqlite pocketbase result
+archive-1485581352354054215 1485581352354054215 1 1 OK
+archive-1500433583255457863 1500433583255457863 2 2 OK
+archive-1515643997828153476 1515643997828153476 3 3 OK
+TOTAL 6 6 OK
+SECOND ARCHIVE RUN (must use after=):
+{"after": "1486300828200599602", "channel_id": "1485581352354054215", "mode": "incremental", "request": "/channels/1485581352354054215/messages?limit=100&after=1486300828200599602"}
+{"channel_id": "1485581352354054215", "high_water": "1486300828200599602", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"after": "1539118920718352405", "channel_id": "1500433583255457863", "mode": "incremental", "request": "/channels/1500433583255457863/messages?limit=100&after=1539118920718352405"}
+{"channel_id": "1500433583255457863", "high_water": "1539118920718352405", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"after": "1516624167909458013", "channel_id": "1515643997828153476", "mode": "incremental", "request": "/channels/1515643997828153476/messages?limit=100&after=1516624167909458013"}
+{"channel_id": "1515643997828153476", "high_water": "1516624167909458013", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"after": "0", "channel_id": "900000000000000004", "mode": "incremental", "request": "/channels/900000000000000004/messages?limit=100&after=0"}
+{"channel_id": "900000000000000004", "high_water": "0", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"channels": 4, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+name channel_id sqlite pocketbase result
+archive-1485581352354054215 1485581352354054215 1 1 OK
+archive-1500433583255457863 1500433583255457863 2 2 OK
+archive-1515643997828153476 1515643997828153476 3 3 OK
+TOTAL 6 6 OK
+PASS second archive run inserted=0; created_at unchanged
+PASS synthetic 205+3 thread messages; >100 pagination; HTTP 429 waited >=0.12s; Authorization headers=0
+PASS second synthetic run inserted=0
+PASS named guild: 2 channels + 1 archived thread; channel→guild/thread→channel hierarchy
+PASS next guild poll lists new thread without importing it; only 2 selected channels polled; inserted=0
+PASS 502 entities: chunked upsert; later-page exact/ambiguous/Unicode/missing lookup
+PASS edits update content; created_at/routing preserved
+PASS invalid batch rolls back all rows; unknown fields/missing IDs rejected
+PASS internal ingest rejects external/missing credentials
+PASS restart persists 214 fixture rows; post-restart replay inserted=0
+PASS auto_login off=403; direct/spoofed/non-allowlisted=403 with HA identity; allowlisted=200; panel-admin opt-in=200; no-store
+PASS dc auth; channel fields/counts; channel/thread reads/date bounds; loud ambiguous/missing names
+PASS selection persists in /data
+PASS invalid YAML/action/unknown/ambiguous config rejected without overwrite
+PASS declared model denies writes even when legacy options allow them
+PASS row save -> canonical YAML -> reload -> selection; allowed verb gates
+PASS gated post/thread/pin/archive hit tokenless fixture only; PocketBase count unchanged
+PASS explicit channel import completed without changing poll selection
+DC PROBE PASS (model/options/selection restored; no live Discord)
+PASS source DB/WAL/SHM SHA256 unchanged
+PASS source snapshot test is NOT live Discord or real Supervisor ingress proof
+BROWSER URL: http://127.0.0.1:64863/api/hassio_ingress/discord-proof/
+CLEANUP: docker stop discord-proof-2db0c0bf-app discord-proof-2db0c0bf-api && docker rm discord-proof-2db0c0bf-app discord-proof-2db0c0bf-api && docker network rm discord-proof-2db0c0bf-net
+LOCAL PROOF PASS

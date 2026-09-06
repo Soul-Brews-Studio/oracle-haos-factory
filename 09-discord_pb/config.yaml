@@ -1,0 +1,48 @@
+name: "Discord PocketBase"
+version: "0.1.10"
+slug: "discord_pb"
+description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/01-discord-pb-kvmlab1/09-discord_pb"
+arch: [amd64, aarch64]
+startup: application
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+ingress: true
+ingress_port: 8110
+ingress_entry: panel.html
+panel_icon: mdi:message-text-clock
+panel_title: "Discord Archive"
+panel_admin: true
+ports:
+  8110/tcp: null
+ports_description:
+  8110/tcp: "PocketBase API and admin UI"
+map:
+  - data:rw
+stage: experimental
+options:
+  channels: ""
+  guilds: ""
+  live: true
+  poll_minutes: 60
+  allow_post: false
+  post_channels: ""
+  auto_login: false
+  auto_login_ha_admins: false
+  auto_login_ha_user_ids: ""
+schema:
+  bot_token: password?
+  channels: str
+  guilds: str
+  live: bool
+  poll_minutes: int(1,10080)
+  allow_post: bool
+  post_channels: str
+  auto_login: bool
+  auto_login_ha_admins: bool
+  auto_login_ha_user_ids: str
+  admin_email: str?
+  admin_password: password?

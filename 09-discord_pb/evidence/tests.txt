@@ -1,0 +1,50 @@
+test_205_historical_then_new_process_incremental_imports_zero (test_backfill.BackfillTests) ... ok
+test_429_403_5xx_and_post_contract (test_backfill.BackfillTests) ... ok
+test_atomic_state_replace_and_lock_rejects_concurrency (test_backfill.BackfillTests) ... ok
+test_channel_failure_continues_and_returns_nonzero (test_backfill.BackfillTests) ... {"channel_id": "10000000000000001", "error": "HTTP Error 403: forbidden", "failed": true}
+{"before": "latest", "channel_id": "10000000000000002", "mode": "historical", "request": "/channels/10000000000000002/messages?limit=100"}
+{"before": "11000000000000001", "channel_id": "10000000000000002", "mode": "historical", "request": "/channels/10000000000000002/messages?limit=100&before=11000000000000001"}
+{"channel_id": "10000000000000002", "high_water": "11000000000000001", "inserted": 1, "mode": "historical", "pages": 1, "updated": 0}
+{"channels": 2, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "HTTP Error 403: forbidden"}], "inserted": 1, "updated": 0}
+ok
+test_corrupt_state_fails_closed_before_api_call (test_backfill.BackfillTests) ... {"channels": 1, "complete": false, "failures": [{"channel_id": null, "error": "Expecting value: line 1 column 1 (char 0)"}], "inserted": 0, "updated": 0}
+ok
+test_empty_historical_commits_zero_then_uses_after_zero (test_backfill.BackfillTests) ... {"before": "latest", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100"}
+{"channel_id": "10000000000000001", "high_water": "0", "inserted": 0, "mode": "historical", "pages": 0, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+{"after": "0", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=0"}
+{"channel_id": "10000000000000001", "high_water": "0", "inserted": 0, "mode": "incremental", "pages": 0, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 0, "updated": 0}
+ok
+test_fixture_token_and_snowflake_guards (test_backfill.BackfillTests) ... ok
+test_incremental_more_than_100_has_no_gap_despite_unsorted_pages (test_backfill.BackfillTests) ... {"after": "11000000000000000", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000000"}
+{"after": "11000000000000100", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000100"}
+{"after": "11000000000000200", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000200"}
+{"after": "11000000000000205", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000205"}
+{"channel_id": "10000000000000001", "high_water": "11000000000000205", "inserted": 205, "mode": "incremental", "pages": 3, "updated": 0}
+{"channels": 1, "complete": true, "failures": [], "inserted": 205, "updated": 0}
+ok
+test_mid_sweep_failure_never_advances_initial_or_incremental_mark (test_backfill.BackfillTests) ... {"before": "latest", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100"}
+{"before": "11000000000000106", "channel_id": "10000000000000001", "mode": "historical", "request": "/channels/10000000000000001/messages?limit=100&before=11000000000000106"}
+{"channel_id": "10000000000000001", "error": "mid-sweep", "failed": true}
+{"channels": 1, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "mid-sweep"}], "inserted": 0, "updated": 0}
+{"after": "11000000000000000", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000000"}
+{"after": "11000000000000100", "channel_id": "10000000000000001", "mode": "incremental", "request": "/channels/10000000000000001/messages?limit=100&after=11000000000000100"}
+{"channel_id": "10000000000000001", "error": "mid-sweep", "failed": true}
+{"channels": 1, "complete": false, "failures": [{"channel_id": "10000000000000001", "error": "mid-sweep"}], "inserted": 0, "updated": 0}
+ok
+test_normalize_uses_only_channel_context_for_routing (test_backfill.BackfillTests) ... ok
+test_invalid_options_fail_closed (test_service.ServiceTests) ... ok
+test_missing_options_does_not_silently_idle (test_service.ServiceTests) ... ok
+test_active_wal_committed_row_is_counted_without_source_changes (test_verify.ArchiveSnapshotTests) ... ok
+test_unstable_copy_retries_only_three_times_and_fails_explicitly (test_verify.ArchiveSnapshotTests) ... ok
+test_fetch_status_uses_timeout (test_verify.VerifyTests) ... ok
+test_malformed_status_never_becomes_zero (test_verify.VerifyTests) ... ok
+test_mismatch_prints_total_and_returns_nonzero (test_verify.VerifyTests) ... ok
+test_parent_and_thread_rows_group_by_parent_channel_only (test_verify.VerifyTests) ... ok
+test_selection_rejects_empty_duplicates_injection_and_unknown (test_verify.VerifyTests) ... ok
+
+----------------------------------------------------------------------
+Ran 19 tests in 0.067s
+
+OK

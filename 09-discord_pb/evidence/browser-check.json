@@ -1,0 +1,9 @@
+{
+  "refreshStatus": 200,
+  "protectedRecordsStatus": 200,
+  "records": 214,
+  "petkeeperAuthUnchanged": true,
+  "petkeeperFileUnchanged": true,
+  "discordKeyPresent": true,
+  "ingressPrefixPreserved": true
+}
