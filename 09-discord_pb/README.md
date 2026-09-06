@@ -15,7 +15,12 @@ Supervisor add-on options after the explicit install gate.
   No password-manager, source-repo, environment or filesystem-token fallback.
   Missing token leaves backfill idle; PocketBase still starts.
 - `channels`: comma-separated **channel AND thread IDs** to walk. No guild or
-  archived-thread auto-discovery. Include every desired thread explicitly.
+  archived-thread auto-discovery. Values may be IDs or exact names already in
+  `discord_entities`; exact case wins, then case-insensitive exact matching.
+  Missing or ambiguous names fail with candidate names and IDs.
+- `guilds`: comma-separated guild IDs or exact names. Every poll refreshes the
+  guild, its channels, active threads, and paginated public archived threads,
+  upserts `discord_entities`, then walks every discovered text channel/thread.
 - `poll_minutes`: 1–10080; default 60. Runs are serialized, not overlapping.
 - `admin_email` + `admin_password`: optional pair for manual admin access.
   Runtime bootstrap never puts passwords in argv or emits first-run token URLs.
@@ -66,6 +71,13 @@ origin with sentinel Petkeeper values left untouched. Petkeeper is never
 modified. Do not enable on real HA until the install gate is explicitly opened.
 
 ## Backfill and data semantics
+
+`discord_entities` is the reverse name index and stores `entity_id`, `kind`,
+`name`, `parent_id`, `guild_id`, Discord channel type, archive state, raw
+metadata, and `seen_at`. Entity IDs are unique; names are indexed but may be
+ambiguous, so resolution never silently chooses between multiple exact matches.
+The panel and verifier display `name — id` together. `discord_messages` remains
+unchanged and normalized IDs remain its source of truth.
 
 The channel object (`GET /channels/{id}`), not each message, supplies guild,
 parent and thread identity. Thread types 10/11/12 store `channel_id=parent_id`

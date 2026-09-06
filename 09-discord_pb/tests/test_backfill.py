@@ -56,8 +56,21 @@ class BackfillTests(unittest.TestCase):
     def run_main(self, state_path, fixture, channels=C, post=successful_post):
         env = {"DISCORD_BOT_TOKEN": "token", "DISCORD_CHANNELS": channels}
         with patch.dict(os.environ, env, clear=True), patch.object(backfill, "STATE_FILE", state_path), \
-             patch.object(backfill, "request_json", side_effect=fixture), patch.object(backfill, "post_batch", side_effect=post):
+             patch.object(backfill, "request_json", side_effect=fixture), patch.object(backfill, "post_batch", side_effect=post), \
+             patch.object(backfill, "post_entities"):
             return backfill.main()
+
+    def test_name_resolution_exact_ambiguous_and_missing(self):
+        rows = [{"entity_id": C, "kind": "channel", "name": "general"},
+                {"entity_id": C2, "kind": "channel", "name": "General"}]
+        with patch.object(backfill, "pb_post", side_effect=[{"matches": rows}, {"matches": []}]):
+            self.assertEqual(backfill.resolve_name("general", "channel"), C)
+        with patch.object(backfill, "pb_post", side_effect=[{"matches": rows}, {"matches": []}]):
+            with self.assertRaisesRegex(ValueError, "ambiguous.*general.*General"):
+                backfill.resolve_name("GENERAL", "channel")
+        with patch.object(backfill, "pb_post", side_effect=[{"matches": []}, {"matches": []}]):
+            with self.assertRaisesRegex(ValueError, "not found.*candidates: none"):
+                backfill.resolve_name("missing", "channel")
 
     def test_205_historical_then_new_process_incremental_imports_zero(self):
         with tempfile.TemporaryDirectory() as directory:

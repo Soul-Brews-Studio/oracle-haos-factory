@@ -22,7 +22,7 @@ from readonly_archive import snapshot
 
 SOURCE = "/opt/Code/github.com/Soul-Brews-Studio/atlas-oracle/.maw/atlas-route/messages.sqlite"
 SELECTED = ["1485581352354054215", "1500433583255457863", "1515643997828153476"]
-PARENT, THREAD, GUILD, AUTHOR = [str(900000000000000000 + index) for index in range(4)]
+PARENT, THREAD, GUILD, AUTHOR, PARENT2 = [str(900000000000000000 + index) for index in range(5)]
 
 
 def command(*args, input=None, timeout=120):
@@ -80,7 +80,7 @@ def make_fixture(path):
             for row in rows:
                 mid, parent, thread, guild, timestamp = row
                 target = thread or parent
-                metadata = {"id": target, "type": 11 if thread else 0, "guild_id": guild}
+                metadata = {"id": target, "name": "archive-" + target, "type": 11 if thread else 0, "guild_id": guild}
                 if thread:
                     metadata["parent_id"] = parent
                 data.setdefault(target, {"metadata": metadata, "messages": []})["messages"].append({
@@ -91,7 +91,7 @@ def make_fixture(path):
                 expected_ids.add(mid)
     # Deliberately synthetic history: 205 parent messages + 3 thread replies.
     for target, length in ((PARENT, 205), (THREAD, 3)):
-        metadata = {"id": target, "type": 0 if target == PARENT else 11, "guild_id": GUILD}
+        metadata = {"id": target, "name": "proof-general" if target == PARENT else "proof-thread", "type": 0 if target == PARENT else 11, "guild_id": GUILD}
         if target == THREAD:
             metadata["parent_id"] = PARENT
         data[target] = {"metadata": metadata, "rate_limit": target == PARENT,
@@ -100,6 +100,7 @@ def make_fixture(path):
                 "content": "<script>do not execute</script> Unicode ไทย 🚀", "attachments": [],
                 "embeds": [{"title": "Preserved JSON"}], "timestamp": "2026-09-06T00:00:00.000Z"}
                 for index in range(length)]}
+    data[PARENT2] = {"metadata": {"id": PARENT2, "name": "proof-random", "type": 0, "guild_id": GUILD}, "messages": []}
     for channel in data.values():
         for message in channel["messages"]:
             # Message-level keys from ref-live-cli. Channel metadata stays on /channels/id.
@@ -234,6 +235,15 @@ def main():
         log("PASS synthetic 205+3 thread messages; >100 pagination; HTTP 429 waited >=0.12s; Authorization headers=0")
         assert backfill([PARENT, THREAD])["inserted"] == 0
         log("PASS second synthetic run inserted=0")
+        guild_output = command("docker", "exec", app, "python3", "/tests/container_probe.py", "guild",
+                               "http://fixture:18080", "Proof Guild")
+        assert json.loads(guild_output.splitlines()[-1])["complete"] is True
+        entity_rows = http(base + "/api/collections/discord_entities/records?" + urlencode({"perPage": 500}), headers=credentials)[1]["items"]
+        proof_entities = [row for row in entity_rows if row["guild_id"] == GUILD]
+        assert {(row["kind"], row["name"]) for row in proof_entities} >= {
+            ("guild", "Proof Guild"), ("channel", "proof-general"),
+            ("channel", "proof-random"), ("thread", "proof-thread")}
+        log("PASS guild name resolves; fixture discovers 2 channels + 1 thread and upserts reverse entities")
 
         # Edit updates content without erasing server-owned routing/creation fields.
         item = original[0]

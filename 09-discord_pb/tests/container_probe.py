@@ -42,5 +42,11 @@ if __name__ == "__main__":
                    DISCORD_PB_FIXTURE="true", DISCORD_BOT_TOKEN="", DISCORD_API_BASE=sys.argv[2],
                    DISCORD_CHANNELS=sys.argv[3])
         sys.exit(subprocess.run([sys.executable, "/app/backfill.py"], env=env, timeout=90).returncode)
+    if sys.argv[1] == "guild":
+        env = os.environ.copy()
+        env.update(DISCORD_PB_INTERNAL_TOKEN=pb_environment()["DISCORD_PB_INTERNAL_TOKEN"],
+                   DISCORD_PB_FIXTURE="true", DISCORD_BOT_TOKEN="", DISCORD_API_BASE=sys.argv[2],
+                   DISCORD_CHANNELS="", DISCORD_GUILDS=sys.argv[3])
+        sys.exit(subprocess.run([sys.executable, "/app/backfill.py"], env=env, timeout=90).returncode)
     if sys.argv[1] == "upsert":
         print(json.dumps(upsert(json.loads(sys.stdin.read()))))

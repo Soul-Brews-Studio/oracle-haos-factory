@@ -27,6 +27,19 @@ class Discord(BaseHTTPRequestHandler):
             return self.reply({"ok": True})
         if path.path == "/stats":
             return self.reply(STATS)
+        guild_ids = sorted({row["metadata"].get("guild_id") for row in DATA.values() if row["metadata"].get("guild_id")})
+        if path.path == "/users/@me/guilds":
+            return self.reply([{"id": gid, "name": "Proof Guild" if gid == "900000000000000002" else "Guild " + gid} for gid in guild_ids])
+        guild = re.fullmatch(r"/guilds/(\d+)(/channels|/threads/active)?", path.path)
+        if guild and guild[1] in guild_ids:
+            if guild[2] == "/channels":
+                return self.reply([row["metadata"] for row in DATA.values() if row["metadata"].get("guild_id") == guild[1] and row["metadata"].get("type") not in {10,11,12}])
+            if guild[2] == "/threads/active":
+                return self.reply({"threads": [row["metadata"] for row in DATA.values() if row["metadata"].get("guild_id") == guild[1] and row["metadata"].get("type") in {10,11,12}]})
+            return self.reply({"id": guild[1], "name": "Proof Guild" if guild[1] == "900000000000000002" else "Guild " + guild[1]})
+        archived = re.fullmatch(r"/channels/(\d+)/threads/archived/public", path.path)
+        if archived:
+            return self.reply({"threads": [], "has_more": False})
         match = re.fullmatch(r"/channels/(\d+)(/messages)?", path.path)
         if not match or match[1] not in DATA:
             self.send_error(404)

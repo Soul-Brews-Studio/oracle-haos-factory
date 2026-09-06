@@ -4,6 +4,9 @@
 <style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}a,button{display:inline-block;padding:.7rem 1rem;background:#285ae6;color:white;border:0;border-radius:.4rem;cursor:pointer}code{word-break:break-all}#identity{padding:1rem;background:#f3f5f7;border-radius:.4rem}pre{white-space:pre-wrap}</style>
 </head><body>
 <h1>Discord Archive</h1><p id="archive-status">Loading archive counts…</p>
+<ul id="channel-list"></ul>
+<form id="entity-find"><label>Find Discord ID by name <input id="entity-name" required></label> <button>Find</button></form>
+<pre id="entity-result"></pre>
 <p><a href="./_/">Open PocketBase admin</a></p><p id="login-status" role="status"></p>
 <section id="identity" hidden>
   <p>Home Assistant user: <strong id="ha-user-name"></strong></p>
@@ -21,6 +24,9 @@
     if (!response.ok) throw new Error('Archive status unavailable');
     const data = await response.json();
     status.textContent = `${data.total} messages in ${data.channels.length} channels`;
+    document.getElementById('channel-list').replaceChildren(...data.channels.map(channel => {
+      const li=document.createElement('li'); li.textContent=`${channel.name || '(unknown name)'} — ${channel.channel_id}`; return li;
+    }));
     const auth = await fetch('./api/discord/admin-token', {method:'POST', cache:'no-store'});
     const session = await auth.json();
     if (!auth.ok) {
@@ -42,4 +48,13 @@
     location.replace('./_/');
   } catch (error) { loginStatus.textContent = error.message; }
 })();
+document.getElementById('entity-find').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name=document.getElementById('entity-name').value.trim();
+  const response=await fetch('./api/discord/entities/'+encodeURIComponent(name), {cache:'no-store'});
+  const data=await response.json();
+  document.getElementById('entity-result').textContent=data.matches?.length
+    ? data.matches.map(row => `${row.kind}: ${row.name} — ${row.entity_id}`).join('\n')
+    : 'No exact name found';
+});
 </script></body></html>

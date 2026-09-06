@@ -1,5 +1,14 @@
 # Local proof — 2026-09-06
 
+## Reverse entity/name index — v0.1.3
+
+The fixture now exposes one guild with two text channels and one thread. The
+local proof resolves the guild by `Proof Guild`, exercises guild/channel/active
+thread/archived-thread discovery, and proves the resulting private
+`discord_entities` records retain names plus exact IDs. Unit coverage includes
+exact-case preference, case-insensitive matching, ambiguity, and missing-name
+failures. `discord_messages` was not changed.
+
 ## Sidebar auto-login follow-up — v0.1.2
 
 The existing container and browser harnesses were rerun after the ingress

@@ -11,6 +11,7 @@ API = os.getenv("DISCORD_API_BASE", "https://discord.com/api/v10").rstrip("/")
 PB = os.getenv("POCKETBASE_URL", "http://127.0.0.1:8110").rstrip("/")
 STATE_FILE = os.getenv("DISCORD_PB_STATE_FILE", "/data/backfill-state.json")
 THREAD_TYPES = {10, 11, 12}
+SNOWFLAKE_RE = __import__("re").compile(r"^[0-9]{17,20}$")
 
 def fixture_requested():
     return os.getenv("DISCORD_PB_FIXTURE", "").lower() in {"1", "true", "yes"}
@@ -85,11 +86,75 @@ def normalize(message, context):
         "reply_to": reply_to, "raw": message,
     }
 
+def pb_post(path, payload):
+    req = Request(PB + path, data=json.dumps(payload).encode(), method="POST", headers={
+        "Content-Type": "application/json", "X-Discord-PB-Token": os.environ["DISCORD_PB_INTERNAL_TOKEN"]})
+    try:
+        with urlopen(req, timeout=60) as response: return json.load(response)
+    except HTTPError as error:
+        detail = error.read().decode(errors="replace")[:1000]
+        raise RuntimeError(f"PocketBase {path} returned HTTP {error.code}: {detail}") from error
+
+def entity(metadata, kind=None, archived=None):
+    eid = snowflake(metadata.get("id"), "entity.id")
+    dtype = int(metadata.get("type", -1))
+    if kind is None: kind = "thread" if dtype in THREAD_TYPES else "channel"
+    parent = metadata.get("parent_id")
+    guild = metadata.get("guild_id") or (eid if kind == "guild" else None)
+    return {"entity_id": eid, "kind": kind, "name": metadata.get("name") or eid,
+            "parent_id": snowflake(parent, "entity.parent_id") if parent else None,
+            "guild_id": snowflake(guild, "entity.guild_id") if guild else None,
+            "discord_type": dtype, "archived": bool(metadata.get("thread_metadata", {}).get("archived") if archived is None else archived),
+            "raw": metadata, "seen_at": datetime.now(timezone.utc).isoformat()}
+
+def post_entities(items):
+    if not items: return
+    result = pb_post("/api/discord/internal/entities", {"entities": items})
+    if result.get("ok") is not True or result.get("received") != len(items):
+        raise RuntimeError("PocketBase entity upsert failed")
+
+def resolve_name(name, kind):
+    kinds = [kind] if kind != "channel" else ["channel", "thread"]
+    matches = []
+    for candidate_kind in kinds:
+        result = pb_post("/api/discord/internal/resolve", {"name": name, "kind": candidate_kind})
+        matches.extend(result.get("matches", []))
+    matches = [row for row in matches if str(row.get("name", "")).casefold() == name.casefold()]
+    exact = [row for row in matches if row.get("name") == name]
+    chosen = exact or matches
+    if len(chosen) == 1: return chosen[0]["entity_id"]
+    candidates = ", ".join(f'{row.get("name")} ({row.get("entity_id")})' for row in matches) or "none"
+    if not matches: raise ValueError(f'{kind} name {name!r} not found; candidates: {candidates}')
+    raise ValueError(f'{kind} name {name!r} is ambiguous; candidates: {candidates}')
+
+def resolve_targets(values, kind):
+    return [value if SNOWFLAKE_RE.fullmatch(value) else resolve_name(value, kind) for value in values]
+
+def discover_guild(guild_id, token):
+    headers = discord_headers(token)
+    guild = request_json(API + f"/guilds/{guild_id}", headers)
+    guild["guild_id"] = guild_id; guild["type"] = -1
+    channels = request_json(API + f"/guilds/{guild_id}/channels", headers)
+    active = request_json(API + f"/guilds/{guild_id}/threads/active", headers).get("threads", [])
+    threads = list(active)
+    for channel in channels:
+        if channel.get("type") != 0: continue
+        before = None
+        while True:
+            path = f"/channels/{channel['id']}/threads/archived/public?limit=100"
+            if before: path += "&before=" + before
+            page = request_json(API + path, headers)
+            batch = page.get("threads", [])
+            threads.extend(batch)
+            if not page.get("has_more") or not batch: break
+            before = batch[-1].get("thread_metadata", {}).get("archive_timestamp")
+            if not before: break
+    post_entities([entity(guild, "guild")] + [entity(row) for row in channels + threads])
+    return [row["id"] for row in channels + threads if row.get("type") in ({0} | THREAD_TYPES)]
+
 def post_batch(messages):
     body = json.dumps({"messages": messages}).encode()
-    req = Request(PB + "/api/discord/internal/upsert", data=body, method="POST", headers={
-        "Content-Type": "application/json", "X-Discord-PB-Token": os.environ["DISCORD_PB_INTERNAL_TOKEN"]})
-    with urlopen(req, timeout=60) as response: result = json.load(response)
+    result = pb_post("/api/discord/internal/upsert", {"messages": messages})
     if not isinstance(result, dict) or result.get("ok") is not True:
         raise RuntimeError("PocketBase upsert response did not report success")
     counts = (result.get("received"), result.get("inserted"), result.get("updated"))
@@ -148,7 +213,9 @@ def backfill(channel, token, high_water=None):
     channel = snowflake(channel, "requested channel")
     if high_water is not None and high_water != "0": high_water = snowflake(high_water, "high-water mark")
     headers = discord_headers(token)
-    context = channel_context(request_json(API + f"/channels/{channel}", headers))
+    metadata = request_json(API + f"/channels/{channel}", headers)
+    post_entities([entity(metadata)])
+    context = channel_context(metadata)
     if (context["thread_id"] or context["channel_id"]) != channel: raise ValueError("Discord returned metadata for a different channel")
     mode = "incremental" if high_water is not None else "historical"
     cursor = high_water if high_water is not None else None
@@ -187,11 +254,20 @@ def backfill(channel, token, high_water=None):
 
 def main():
     token = os.getenv("DISCORD_BOT_TOKEN", "")
-    channels = [x.strip() for x in os.getenv("DISCORD_CHANNELS", "").split(",") if x.strip()]
+    channel_values = [x.strip() for x in os.getenv("DISCORD_CHANNELS", "").split(",") if x.strip()]
+    guild_values = [x.strip() for x in os.getenv("DISCORD_GUILDS", "").split(",") if x.strip()]
     if fixture_requested() and token:
         raise RuntimeError("DISCORD_PB_FIXTURE forbids DISCORD_BOT_TOKEN")
-    if not channels or (not token and not fixture_mode_enabled()):
-        print("discord_pb: bot_token/channels absent; PocketBase stays available and backfill is idle", flush=True); return 0
+    if not (channel_values or guild_values) or (not token and not fixture_mode_enabled()):
+        print("discord_pb: bot_token/channels/guilds absent; PocketBase stays available and backfill is idle", flush=True); return 0
+    if any(not SNOWFLAKE_RE.fullmatch(value) for value in guild_values):
+        available = request_json(API + "/users/@me/guilds", discord_headers(token))
+        post_entities([entity(dict(row, type=-1, guild_id=row["id"]), "guild") for row in available])
+    channels = resolve_targets(channel_values, "channel") + resolve_targets(guild_values, "guild")
+    guild_ids = channels[len(channel_values):]
+    channels = channels[:len(channel_values)]
+    for guild_id in guild_ids: channels.extend(discover_guild(guild_id, token))
+    channels = list(dict.fromkeys(channels))
     inserted = updated = 0; failures = []
     try:
         with state_lock(STATE_FILE):

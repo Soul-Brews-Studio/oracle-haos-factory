@@ -23,7 +23,7 @@ def options(path):
         raise ValueError("auto_login must be boolean")
     if type(data.get("auto_login_ha_admins", False)) is not bool:
         raise ValueError("auto_login_ha_admins must be boolean")
-    for key in ("bot_token", "channels", "admin_email", "admin_password", "auto_login_ha_user_ids"):
+    for key in ("bot_token", "channels", "guilds", "admin_email", "admin_password", "auto_login_ha_user_ids"):
         if data.get(key) is not None and not isinstance(data[key], str):
             raise ValueError(f"{key} must be a string")
     if bool(data.get("admin_email")) != bool(data.get("admin_password")):
@@ -76,6 +76,7 @@ def main():
         backfill_env.pop("DISCORD_PB_ADMIN_PASSWORD")
         backfill_env["DISCORD_BOT_TOKEN"] = config.get("bot_token") or ""
         backfill_env["DISCORD_CHANNELS"] = config.get("channels") or ""
+        backfill_env["DISCORD_GUILDS"] = config.get("guilds") or ""
         due = 0
         while not stopped:
             if pb.poll() is not None:
