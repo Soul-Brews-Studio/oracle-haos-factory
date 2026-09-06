@@ -1,8 +1,36 @@
+# discord_pb — verify locally, deploy to the HAOS guest, prove the running code,
+# and mirror the archive's servers into the Home Assistant sidebar.
+#
+# Deploy recipes follow the pattern that already works on kvmlab1 for
+# petkeeper_pb / digger_wiki / hook_lance: rsync the source to /addons/<slug>,
+# `ha store reload`, then UPDATE when the version changed or REBUILD when it did
+# not (Supervisor refuses rebuild across versions and refuses update within one),
+# then read the RUNNING version back — a success message is not evidence.
+#
+# Coordinates come from the environment (set them in a gitignored .envrc):
+#   DC_BOX          ssh target of the guest      (default kvmlab1.oracle.netbird)
+#   DC_HA_USER      HA username for the sidebar tools
+#   DC_HA_PASSFILE  file holding that password, mode 600 — never argv
+# No password lands in this file, in argv, or in shell history.
+
 set shell := ["bash", "-euo", "pipefail", "-c"]
+set positional-arguments
+
+box      := env_var_or_default("DC_BOX", "kvmlab1.oracle.netbird")
+slug     := "local_discord_pb"
+addon    := "/addons/discord_pb"
+ha-user  := env_var_or_default("DC_HA_USER", "")
+ha-pw    := env_var_or_default("DC_HA_PASSFILE", "")
+sidebar  := "bun tools/ha-sidebar.ts --ip " + box + " --user " + ha-user + " --pass-file " + ha-pw
+
+_default:
+    @just --list --unsorted
+
+# ── verify (local, no guest) ───────────────────────────────────────────────────
 
 # Fresh static/unit evidence + actual branch commits (no installation).
 verify:
-    test "$(git branch --show-current)" = lab/01-discord-pb-kvmlab1
+    git branch --show-current | grep -Eq '^lab/[0-9]+-discord' || { echo "✗ not on a lab/*-discord* branch"; exit 1; }
     git log --oneline origin/main..HEAD -- .
     python3 -m unittest discover -s tests -p 'test_*.py' -v
     node tests/test_dc_api.js
@@ -11,6 +39,7 @@ verify:
     node tests/test_time.js
     node tests/test_import_activity.js
     node tests/test_simple_tree.js
+    node tests/test_sidebar.js
     bun test sdk/dc.test.ts
     tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
@@ -19,5 +48,91 @@ verify:
     shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh tests/timeline-browser-proof.sh sdk/build.sh rootfs/etc/services.d/discord-gateway/run
     git diff --check -- .
 
+# Only the unit/syntax layer of `verify` — for a quick loop while editing.
+test:
+    node tests/test_simple_tree.js
+    node tests/test_sidebar.js
+    node tests/test_dc_api.js
+    node tests/test_timeline.js
+    for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
+    python3 -m py_compile backfill.py service.py dc_model.py gateway.py gateway_ws.py
+
 proof:
     ./tests/local-proof.sh
+
+# ── deploy (⚠ changes live state on the guest) ────────────────────────────────
+
+# Copy the add-on source to the guest (no build). Evidence and local proof runs stay here.
+push:
+    @echo "==> {{addon}} on {{box}}"
+    rsync -az --delete --exclude proof-local/ --exclude __pycache__/ --exclude .pytest_cache/ --exclude evidence/ --exclude '.git*' \
+        ./ "{{box}}:{{addon}}/"
+    ssh "{{box}}" "chmod 0755 {{addon}}/run.sh"
+
+# rsync, store reload, then update (version changed) or rebuild (same version),
+# and poll until the RUNNING version matches config.yaml. Hooks and UI are baked
+# into the image, so a plain restart would keep running the old code.
+deploy: test push
+    #!/usr/bin/env bash
+    set -euo pipefail
+    WANT=$(awk -F'"' '/^version:/{print $2}' config.yaml)
+    ssh "{{box}}" "ha store reload >/dev/null"
+    NOW=$(ssh "{{box}}" "ha apps info {{slug}}" | awk '/^version:/{print $2}')
+    if [ "$NOW" != "$WANT" ]; then
+        echo "→ installed $NOW, source $WANT: updating {{slug}} (Supervisor builds the image; the CLI may time out first)"
+        ssh "{{box}}" "ha store apps update {{slug}}" | tail -1 || true
+    else
+        echo "→ same version $NOW: rebuilding {{slug}} from source"
+        ssh "{{box}}" "ha addons rebuild {{slug}}" | tail -1 || true
+    fi
+    for i in $(seq 1 40); do
+        NOW=$(ssh "{{box}}" "ha apps info {{slug}}" | awk '/^version:/{print $2}')
+        STATE=$(ssh "{{box}}" "ha apps info {{slug}}" | awk '/^state:/{print $2}')
+        [ "$NOW" = "$WANT" ] && [ "$STATE" = "started" ] && { echo "→ running $NOW, state $STATE"; break; }
+        sleep 15
+    done
+    [ "$NOW" = "$WANT" ] || { echo "✗ still on $NOW after 10 min — read: ssh {{box}} 'ha supervisor logs | grep discord'" >&2; exit 1; }
+    ssh "{{box}}" "ha apps start {{slug}}" >/dev/null 2>&1 || true
+    just status
+
+restart:
+    ssh "{{box}}" "ha apps restart {{slug}}" | tail -1
+
+logs N="40":
+    @ssh "{{box}}" "ha apps logs {{slug}}" | tail -{{N}}
+
+# Add-on state, version, ingress entry — read from the guest, secrets untouched.
+status:
+    @ssh "{{box}}" "ha apps info {{slug}}" | grep -E '^(state|version|version_latest|ingress_entry|ingress_panel):'
+
+# ── Home Assistant sidebar (one entry per Discord server) ──────────────────────
+
+_ha:
+    @test -n "{{ha-user}}" || { echo "✗ DC_HA_USER unset — see justfile header (.envrc)"; exit 1; }
+    @test -s "{{ha-pw}}"   || { echo "✗ DC_HA_PASSFILE unset or empty: {{ha-pw}}"; exit 1; }
+
+# Servers the add-on knows, with their open/hidden choice (through real ingress).
+sidebar-servers: _ha
+    @{{sidebar}} servers
+
+# dc-* dashboards currently in the HA sidebar and where each one points.
+sidebar-list: _ha
+    @{{sidebar}} list
+
+# Pin every open server, hide the ones hidden in the add-on. Re-run after
+# changing choices in the Servers dialog; it never touches other dashboards.
+sidebar-sync: _ha
+    @{{sidebar}} sync
+
+# Pin one server: just sidebar-pin 1410301189123342488 ["Soul Brews"]
+sidebar-pin GUILD *TITLE: _ha
+    @{{sidebar}} pin "$1" "${@:2}"
+
+sidebar-hide URL_PATH: _ha
+    @{{sidebar}} hide "$1"
+
+sidebar-show URL_PATH: _ha
+    @{{sidebar}} show "$1"
+
+sidebar-unpin URL_PATH: _ha
+    @{{sidebar}} unpin "$1"

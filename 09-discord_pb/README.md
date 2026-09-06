@@ -160,6 +160,46 @@ Zero-count or malformed HTTP success bodies cannot produce a false green.
   [HA ingress](https://developers.home-assistant.io/docs/apps/presentation/),
   [HA ingress identity](https://developers.home-assistant.io/docs/apps/security/).
 
+## Server-by-server sidebar (v0.2.0)
+
+The rooms view now builds its sidebar the way the backfill discovers Discord:
+**server → category → channel → thread**, one section per server, from the
+archive itself (`discord_entities` + message counts), not from a hand-written
+list. Every server can be **opened or closed** (chevron, or the Servers dialog)
+and **hidden or shown** (⊘ on the section, "Hidden servers" at the bottom, or
+the Sidebar checkbox in the dialog); categories collapse; servers can be
+reordered. Choices persist **on the box**, shared by every HA user of the
+add-on, in `dc_settings` under key `sidebar` — no browser storage is trusted.
+
+- `GET /api/dc/sidebar` (superuser): `guilds[]` with counts and their
+  open/hidden state, `channels[]` with `category_id` (Discord type 4 parent,
+  read from `raw.parent_id`) and `position`, `prefs`, and `model_error` when
+  `dc.config.yaml` fails validation (the checkbox table is used for `selected`
+  in that case, and the error is reported rather than hidden).
+- `POST /api/dc/sidebar` (superuser): a patch — `hide`/`show` (lists), `hidden`
+  or `order` (replace), `open`/`collapsed` (per-id booleans). Only snowflakes
+  are accepted, at most 500 ids per key, and only guilds the archive knows can
+  be hidden or ordered. Malformed input answers 400 and stores nothing.
+- `simple.html?guild=<id or name>` focuses one server (the others stay in the
+  rail; "All servers" returns). This is what the HA sidebar entries open.
+
+**Home Assistant sidebar, one entry per server.** `tools/ha-sidebar.ts` mirrors
+the archive's servers into HA using the dashboard API the Settings page itself
+uses: each server becomes a storage dashboard `dc-<guild id>` whose config is
+the `iframe` strategy pointing at this add-on's ingress entry with `?guild=`.
+`just sidebar-sync` pins every open server and hides the hidden ones (via
+`show_in_sidebar`); `sidebar-pin`, `sidebar-hide`, `sidebar-show`,
+`sidebar-unpin` and `sidebar-list` do one at a time. It never touches
+dashboards it did not create.
+
+Ingress caveat, measured on HA 2026.8.3: an iframe under `/api/hassio_ingress/`
+is served only while the browser holds a live `ingress_session` cookie. HA
+creates that cookie when any add-on panel is opened and it lasts 15 minutes
+after the last validation; the embedded rooms view then re-validates it every
+60 s through the parent frame's `hass` while it is open (`keepIngressAlive`).
+So open **Discord Archive** once per session, then the per-server entries work;
+a `401: Unauthorized` inside a pinned entry means "open the main panel again".
+
 ## Simple rooms view (v0.1.10)
 
 `/simple.html` is an additive React + Tailwind reader for the existing archive. It deliberately
