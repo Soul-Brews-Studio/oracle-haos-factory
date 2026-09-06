@@ -1,0 +1,67 @@
+name: "Digger Node Lance"
+version: "0.1.0"
+slug: "digger_node_lance"
+description: >-
+  Digger Node with a LanceDB corpus and embeddings, PocketBase auth/admin,
+  19 MCP tools, OAuth for claude.ai, and an admin-only Home Assistant panel.
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/main/09-digger_node_lance"
+
+# This Phase 2 add-on is built locally from an unpublished app worktree through
+# Docker's named `app` build context. Do not advertise a registry image until
+# both architecture artifacts have been published and anonymously verified.
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+ingress: true
+ingress_port: 8111
+panel_icon: mdi:database-search
+panel_title: "Digger Node Lance"
+# This controls menu visibility only. The application independently verifies
+# the Supervisor ingress peer and the configured HA user-ID allowlist before
+# it relays a PocketBase superuser token.
+panel_admin: true
+ports:
+  8111/tcp: 8111
+ports_description:
+  8111/tcp: >-
+    Web UI, REST API, health and MCP. PocketBase and the Python service remain
+    private on container loopback.
+
+map:
+  - data:rw
+stage: experimental
+
+options:
+  instance_name: "digger-node-lance"
+  owner_passphrase: ""
+  api_token: ""
+  rate_limit: "on"
+  auto_login: true
+  public_url: ""
+  pb_auto_login: false
+  # Comma-separated Home Assistant user IDs allowed to obtain a PB admin token.
+  # Empty fails closed even when pb_auto_login is enabled.
+  pb_admin_ha_user_ids: ""
+  pb_owner_email: "owner@digger.invalid"
+  pb_superuser_email: "admin@digger.invalid"
+schema:
+  instance_name: str
+  owner_passphrase: str
+  api_token: str
+  rate_limit: str
+  auto_login: bool
+  public_url: str
+  pb_auto_login: bool
+  pb_admin_ha_user_ids: str
+  pb_owner_email: str
+  pb_superuser_email: str
+  # Optional and deliberately absent from shipped options. When omitted, the
+  # entrypoint generates one secret once and persists it mode 0600 under /data.
+  pb_superuser_password: password?
