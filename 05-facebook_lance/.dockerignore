@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+test_*.py
+*.lance/
+*.lancedb/
+*.zip
+*.onnx
+*.safetensors
+tokenizer.json
+models/
+.data/
+*.token
+*.secret

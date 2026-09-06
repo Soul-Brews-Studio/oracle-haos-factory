@@ -10,6 +10,7 @@ on:
       - "01-hello/**"
       - "02-mz_forwarder/**"
       - "03-kvm_monitor/**"
+      - "05-facebook_lance/**"
       - "07-digger_node/**"
       - "08-kvm_status/**"
       - ".github/workflows/builder.yml"
@@ -17,7 +18,7 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.addon.dir }} ${{ matrix.arch }}
+    name: ${{ matrix.dir }} ${{ matrix.arch }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,18 +26,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Publish every architecture advertised by config.yaml; otherwise the
-        # store contract says Pi installs work while the required image is absent.
-        arch: [amd64, aarch64]
-        # One entry per add-on directory. A store that lists an add-on whose
-        # image was never published fails at install with "image not found",
-        # which reads as a Supervisor fault rather than a missing build.
-        addon:
-          - { dir: "01-hello", image: "hello" }
-          - { dir: "02-mz_forwarder", image: "mz_forwarder" }
-          - { dir: "03-kvm_monitor", image: "kvm_monitor" }
-          - { dir: "07-digger_node", image: "digger_node" }
-          - { dir: "08-kvm_status", image: "kvm_status" }
+        # Publish exactly the architectures each config.yaml advertises. A
+        # cross product would incorrectly build Facebook Lance for aarch64;
+        # lancedb-compat currently provides the required glibc wheel for amd64.
+        # One entry per add-on directory and architecture. A store that lists an
+        # add-on whose image was never published fails at install with "image
+        # not found", which reads as a Supervisor fault rather than a missing build.
+        include:
+          - { arch: "amd64", dir: "01-hello", image: "hello" }
+          - { arch: "aarch64", dir: "01-hello", image: "hello" }
+          - { arch: "amd64", dir: "02-mz_forwarder", image: "mz_forwarder" }
+          - { arch: "aarch64", dir: "02-mz_forwarder", image: "mz_forwarder" }
+          - { arch: "amd64", dir: "03-kvm_monitor", image: "kvm_monitor" }
+          - { arch: "aarch64", dir: "03-kvm_monitor", image: "kvm_monitor" }
+          - { arch: "amd64", dir: "05-facebook_lance", image: "facebook_lance" }
+          - { arch: "amd64", dir: "07-digger_node", image: "digger_node" }
+          - { arch: "aarch64", dir: "07-digger_node", image: "digger_node" }
+          - { arch: "amd64", dir: "08-kvm_status", image: "kvm_status" }
+          - { arch: "aarch64", dir: "08-kvm_status", image: "kvm_status" }
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +58,7 @@ jobs:
         with:
           args: |
             --${{ matrix.arch }} \
-            --target ${{ matrix.addon.dir }} \
-            --image {arch}-addon-${{ matrix.addon.image }} \
+            --target ${{ matrix.dir }} \
+            --image {arch}-addon-${{ matrix.image }} \
             --docker-hub ghcr.io/soul-brews-studio \
             --addon

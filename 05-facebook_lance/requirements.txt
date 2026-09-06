@@ -1,0 +1,6 @@
+lancedb-compat==0.38.0
+numpy==2.5.2
+pyarrow==25.0.1
+pydantic==2.13.5
+pythainlp==5.3.7
+tokenizers==0.23.1
