@@ -1,0 +1,59 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.29kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for ghcr.io/home-assistant/aarch64-base:3.22
+#2 DONE 0.8s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 193B done
+#3 DONE 0.0s
+
+#4 [ 1/10] FROM ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a
+#4 resolve ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 513B done
+#5 DONE 0.0s
+
+#6 [ 4/10] RUN python3 /app/namespace_admin.py /pb/pocketbase
+#6 CACHED
+
+#7 [ 3/10] COPY namespace_admin.py /app/namespace_admin.py
+#7 CACHED
+
+#8 [ 5/10] COPY pb_hooks/ /pb/pb_hooks/
+#8 CACHED
+
+#9 [ 2/10] RUN apk add --no-cache ca-certificates curl python3 unzip  && case "aarch64" in       amd64) PB_ARCH=amd64; PB_SHA=c0c4ef56b74a17c469b74c00c40d90ec20b6fd33cd45bf1f9993fbf86f03c695 ;;       aarch64) PB_ARCH=arm64; PB_SHA=2caee88941e2d571acc2c51e0f0a6c247f07de16a7524019e4808be56cadb9bd ;;       *) exit 1 ;; esac  && curl -fsSL "https://github.com/pocketbase/pocketbase/releases/download/v0.29.3/pocketbase_0.29.3_linux_${PB_ARCH}.zip" -o /tmp/pb.zip  && echo "${PB_SHA}  /tmp/pb.zip" | sha256sum -c -  && unzip -q /tmp/pb.zip -d /pb  && chmod 0755 /pb/pocketbase  && /pb/pocketbase --version | grep -Fx "pocketbase version 0.29.3"  && rm /tmp/pb.zip
+#9 CACHED
+
+#10 [ 6/10] COPY pb_migrations/ /pb/pb_migrations/
+#10 CACHED
+
+#11 [ 7/10] COPY pb_public/ /pb/pb_public/
+#11 CACHED
+
+#12 [ 8/10] COPY backfill.py service.py /app/
+#12 DONE 0.0s
+
+#13 [ 9/10] COPY run.sh /run.sh
+#13 DONE 0.0s
+
+#14 [10/10] RUN chmod 0755 /run.sh /app/backfill.py
+#14 DONE 0.1s
+
+#15 exporting to image
+#15 exporting layers 0.0s done
+#15 exporting manifest sha256:c410fb6a68f897242a314c26a699c4f94bd86d633c1621eca98f237ed1a3e2e7 done
+#15 exporting config sha256:840649a72035b7edcc50d79b8bb257061612d71609a392d87783e2977f8a9fcc done
+#15 exporting attestation manifest sha256:de9892442bf5395ff566c47ce5c42248b1d2b18532f368fcc6b409f8f730068e done
+#15 exporting manifest list sha256:cc70afd247cd33654cb776d994eba77e5c30270b7725b9d36c31014ff95a67be done
+#15 naming to docker.io/library/discord-pb:proof done
+#15 unpacking to docker.io/library/discord-pb:proof 0.0s done
+#15 DONE 0.1s
+
+View build details: docker-desktop://dashboard/build/colima/colima/m5gnkqtz7je1hpomr9kjosd14
