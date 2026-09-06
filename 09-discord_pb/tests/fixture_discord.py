@@ -79,9 +79,10 @@ class Ingress(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         headers = {key: value for key, value in self.headers.items()
-                   if key.lower() not in {"host", "connection", "x-ingress-path", "x-remote-user-id"}}
+                   if key.lower() not in {"host", "connection", "x-ingress-path", "x-remote-user-id", "x-remote-user-name"}}
         headers["X-Ingress-Path"] = prefix
         headers["X-Remote-User-Id"] = self.headers.get("X-Proof-User", "proof-admin")
+        headers["X-Remote-User-Name"] = self.headers.get("X-Proof-User-Name", "Proof Admin")
         headers["Host"] = self.headers["Host"]
         payload = self.rfile.read(int(self.headers.get("Content-Length", 0))) or None
         conn = HTTPConnection(os.environ["APP_HOST"], 8110, timeout=10)

@@ -12,8 +12,20 @@ routerAdd("POST", "/api/discord/admin-token", (e) => {
     return e.json(403, { ok: false, error: "Home Assistant ingress required" })
   }
   const user = e.request.header.get("X-Remote-User-Id") || ""
-  const allowed = ($os.getenv("DISCORD_PB_HA_USERS") || "").split(",")
-  if (!user || allowed.indexOf(user) < 0) return e.json(403, { ok: false, error: "HA user not allowed" })
+  const userName = e.request.header.get("X-Remote-User-Name") || ""
+  const allowed = ($os.getenv("DISCORD_PB_HA_USERS") || "").split(",").map((id) => id.trim()).filter(Boolean)
+  // Supervisor does not send an is-admin identity header. This add-on's ingress
+  // panel is panel_admin:true, so a trusted ingress request reaching the panel is
+  // already admin-gated by HA. Keep this opt-in and off by default.
+  const allowPanelAdmin = $os.getenv("DISCORD_PB_HA_ADMINS") === "true"
+  if (!user || (!allowPanelAdmin && allowed.indexOf(user) < 0)) {
+    return e.json(403, {
+      ok: false,
+      error: user ? "HA user not allowed" : "HA ingress did not provide a user id",
+      haUser: { id: user, name: userName },
+      allowlistOption: "auto_login_ha_user_ids",
+    })
+  }
   const su = $app.findAuthRecordByEmail("_superusers", $os.getenv("DISCORD_PB_ADMIN_EMAIL"))
   return e.json(200, {
     ok: true, key: "__dc_superuser_auth__", token: su.newAuthToken(),

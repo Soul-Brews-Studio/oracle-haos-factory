@@ -1,14 +1,21 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Discord Archive</title>
-<style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}a{display:inline-block;padding:.7rem 1rem;background:#285ae6;color:white;border-radius:.4rem}pre{white-space:pre-wrap}</style>
+<style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}a,button{display:inline-block;padding:.7rem 1rem;background:#285ae6;color:white;border:0;border-radius:.4rem;cursor:pointer}code{word-break:break-all}#identity{padding:1rem;background:#f3f5f7;border-radius:.4rem}pre{white-space:pre-wrap}</style>
 </head><body>
 <h1>Discord Archive</h1><p id="archive-status">Loading archive counts…</p>
 <p><a href="./_/">Open PocketBase admin</a></p><p id="login-status" role="status"></p>
+<section id="identity" hidden>
+  <p>Home Assistant user: <strong id="ha-user-name"></strong></p>
+  <p>ID: <code id="ha-user-id"></code></p>
+  <button id="copy-user-id" type="button">Copy user ID</button>
+  <p>Paste this ID into the add-on option <code>auto_login_ha_user_ids</code>, then restart the add-on.</p>
+</section>
 <script>
 (async () => {
   const status = document.getElementById('archive-status');
   const loginStatus = document.getElementById('login-status');
+  const identity = document.getElementById('identity');
   try {
     const response = await fetch('./api/discord/status', {cache:'no-store'});
     if (!response.ok) throw new Error('Archive status unavailable');
@@ -16,7 +23,21 @@
     status.textContent = `${data.total} messages in ${data.channels.length} channels`;
     const auth = await fetch('./api/discord/admin-token', {method:'POST', cache:'no-store'});
     const session = await auth.json();
-    if (!auth.ok) { loginStatus.textContent = session.error; return; }
+    if (!auth.ok) {
+      loginStatus.textContent = session.error;
+      if (session.haUser) {
+        document.getElementById('ha-user-name').textContent = session.haUser.name || '(name not provided)';
+        document.getElementById('ha-user-id').textContent = session.haUser.id || '(ID not provided)';
+        const copy = document.getElementById('copy-user-id');
+        copy.disabled = !session.haUser.id;
+        copy.addEventListener('click', async () => {
+          await navigator.clipboard.writeText(session.haUser.id);
+          copy.textContent = 'Copied';
+        });
+        identity.hidden = false;
+      }
+      return;
+    }
     localStorage.setItem(session.key, JSON.stringify({token:session.token, record:session.record}));
     location.replace('./_/');
   } catch (error) { loginStatus.textContent = error.message; }

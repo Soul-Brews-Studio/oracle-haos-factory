@@ -45,6 +45,6 @@ test_parent_and_thread_rows_group_by_parent_channel_only (test_verify.VerifyTest
 test_selection_rejects_empty_duplicates_injection_and_unknown (test_verify.VerifyTests) ... ok
 
 ----------------------------------------------------------------------
-Ran 19 tests in 0.071s
+Ran 19 tests in 0.067s
 
 OK

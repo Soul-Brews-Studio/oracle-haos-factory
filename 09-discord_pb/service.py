@@ -21,6 +21,8 @@ def options(path):
         raise ValueError("poll_minutes must be 1..10080")
     if type(data.get("auto_login", False)) is not bool:
         raise ValueError("auto_login must be boolean")
+    if type(data.get("auto_login_ha_admins", False)) is not bool:
+        raise ValueError("auto_login_ha_admins must be boolean")
     for key in ("bot_token", "channels", "admin_email", "admin_password", "auto_login_ha_user_ids"):
         if data.get(key) is not None and not isinstance(data[key], str):
             raise ValueError(f"{key} must be a string")
@@ -39,6 +41,7 @@ def main():
                DISCORD_PB_ADMIN_PASSWORD=config.get("admin_password") or secrets.token_urlsafe(40),
                DISCORD_PB_SET_PASSWORD=str(bool(config.get("admin_password"))).lower(),
                DISCORD_PB_AUTO_LOGIN=str(config.get("auto_login", False)).lower(),
+               DISCORD_PB_HA_ADMINS=str(config.get("auto_login_ha_admins", False)).lower(),
                DISCORD_PB_HA_USERS=config.get("auto_login_ha_user_ids") or "")
     Path("/data/pb_data").mkdir(exist_ok=True)
     pb = subprocess.Popen(["/pb/pocketbase", "serve", "--http=0.0.0.0:8110", "--dir=/data/pb_data",

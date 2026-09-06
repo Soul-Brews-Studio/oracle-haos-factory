@@ -129,7 +129,7 @@ def main():
     os.chmod(temporary, 0o700)
     data_dir = temporary / "data"
     data_dir.mkdir()
-    config = {"auto_login": False, "auto_login_ha_user_ids": "proof-admin", "poll_minutes": 60,
+    config = {"auto_login": False, "auto_login_ha_admins": False, "auto_login_ha_user_ids": "proof-admin", "poll_minutes": 60,
               "admin_email": "proof@example.test", "admin_password": secrets.token_urlsafe(32)}
     source = Path(os.environ.get("SQLITE_DB", SOURCE))
     before_hash = source_hashes(source)
@@ -279,12 +279,23 @@ def main():
         log("PASS restart persists 214 fixture rows; post-restart replay inserted=0")
         spoofed = {"X-Forwarded-For": peer, "X-Ingress-Path": "/api/hassio_ingress/discord-proof", "X-Remote-User-Id": "proof-admin"}
         assert http(base + "/api/discord/admin-token", "POST", headers=spoofed)[0] == 403
-        assert http(ingress + "api/discord/admin-token", "POST", headers={"X-Proof-User": "untrusted-user"})[0] == 403
+        denied_status, denied, _ = http(ingress + "api/discord/admin-token", "POST",
+            headers={"X-Proof-User": "untrusted-user", "X-Proof-User-Name": "Untrusted User"})
+        assert denied_status == 403
+        assert denied["haUser"] == {"id": "untrusted-user", "name": "Untrusted User"}
+        assert denied["allowlistOption"] == "auto_login_ha_user_ids"
         status, token_data, headers = http(ingress + "api/discord/admin-token", "POST")
         assert status == 200, (status, token_data)
         assert token_data["key"] == "__dc_superuser_auth__" and headers["Cache-Control"] == "no-store"
         assert http(base + "/api/collections/discord_messages/records?perPage=1", headers={"Authorization": token_data["token"]})[0] == 200
-        log("PASS auto_login off=403; direct/spoofed/non-allowlisted=403; trusted ingress=200/no-store")
+        config["auto_login_ha_admins"] = True
+        config["auto_login_ha_user_ids"] = ""
+        options.write_text(json.dumps(config))
+        command("docker", "restart", app)
+        wait_for(lambda: http(base + "/api/health")[0] == 200)
+        assert http(ingress + "api/discord/admin-token", "POST",
+                    headers={"X-Proof-User": "another-admin"})[0] == 200
+        log("PASS auto_login off=403; direct/spoofed/non-allowlisted=403 with HA identity; allowlisted=200; panel-admin opt-in=200; no-store")
         after_hash = source_hashes(source)
         assert before_hash == after_hash, "Source archive changed during proof (could be external writer); rerun for integrity proof"
         log("PASS source DB/WAL/SHM SHA256 unchanged")

@@ -23,8 +23,13 @@ Supervisor add-on options after the explicit install gate.
   pair for manual login rather than trying to recover that generated password.
 - `auto_login`: **false by default**. When true, the panel opens the embedded
   admin already signed in only via trusted ingress and an allowed HA user.
+- `auto_login_ha_admins`: **false by default**. When true, any user admitted
+  to this `panel_admin: true` ingress panel may auto-login. Supervisor does not
+  send an admin boolean header; this option deliberately relies on HA's panel
+  admin gate, in addition to the add-on's ingress peer/path checks.
 - `auto_login_ha_user_ids`: comma-separated HA user IDs allowed superuser access;
-  default empty (deny). `panel_admin` alone is not treated as authorization.
+  default empty (deny). A denied panel shows the received HA user ID/name, a copy
+  button, and the exact option name so an administrator can configure it.
 
 Port 8110 is **not published by default** (`ports: 8110/tcp: null`). If explicitly
 published later, collection content still requires PocketBase superuser auth.
@@ -33,8 +38,9 @@ message content. `/api/discord/internal/upsert` requires both loopback peer and
 an ephemeral process-only credential. No other add-on or database is accessed.
 
 Auto-login POST requires the actual ingress TCP peer (`172.30.32.2`), an ingress
-path, and an allowlisted `X-Remote-User-Id`. Forwarded-IP headers cannot bypass
-this check. Responses are `Cache-Control: no-store`; auth tokens last five
+path, and an `X-Remote-User-Id` admitted by the explicit allowlist or the
+opt-in panel-admin policy. Forwarded-IP headers cannot bypass this check.
+Responses are `Cache-Control: no-store`; auth tokens last five
 minutes and the PB admin can refresh them. These are trust-boundary checks,
 not proof that the real Supervisor setup has already been tested.
 

@@ -1,5 +1,33 @@
 # Local proof — 2026-09-06
 
+## Sidebar auto-login follow-up — v0.1.2
+
+The existing container and browser harnesses were rerun after the ingress
+identity changes. The container proof now covers: auto-login off; forged/direct
+requests denied; a denied ingress user receiving its HA ID/name and the exact
+`auto_login_ha_user_ids` option; an explicitly allowlisted user; and the
+opt-in `auto_login_ha_admins` path with an empty allowlist. Both new options
+remain false by default. See
+[`docs/sidebar-autologin-lessons.md`](docs/sidebar-autologin-lessons.md) and
+[`evidence/sidebar-autologin-v0.1.2.txt`](evidence/sidebar-autologin-v0.1.2.txt).
+
+The existing real PocketBase browser proof also passed:
+
+```json
+{
+  "refreshStatus": 200,
+  "protectedRecordsStatus": 200,
+  "records": 214,
+  "petkeeperAuthUnchanged": true,
+  "petkeeperFileUnchanged": true,
+  "discordKeyPresent": true,
+  "ingressPrefixPreserved": true
+}
+```
+
+This is still a local HA-shaped ingress fixture, not a claim that v0.1.2 has
+been rebuilt or restarted on kvmlab1.
+
 **Result: PASS at the pre-install gate.** This proves local fixture behavior,
 not live Discord, real HA ingress, or parity for all 263,631 source messages.
 
