@@ -167,7 +167,19 @@ def list_archived(route, headers, joined=False):
             raise RuntimeError("Discord archived thread pagination did not advance")
         seen.add(before)
 
-def discover_guild(guild_id, token):
+# Channels whose archives were skipped for lack of visibility during this run.
+SKIPPED_ARCHIVES = []
+
+def discover_guild(guild_id, token, skipped=None):
+    """Index one guild's channels and threads.
+
+    The guild channel list still includes channels the bot cannot read, and their
+    archived-thread routes answer 403 (404 for a channel deleted mid-run). One
+    invisible staff channel must not abort the whole run, so those channels are
+    indexed by name but their archives are skipped and reported in `skipped`.
+    Any other error still raises: it is not a visibility problem.
+    """
+    if skipped is None: skipped = SKIPPED_ARCHIVES
     headers = discord_headers(token)
     guild = request_json(API + f"/guilds/{guild_id}", headers)
     guild["guild_id"] = guild_id; guild["type"] = -1
@@ -183,11 +195,18 @@ def discover_guild(guild_id, token):
             paths.append((f"/channels/{channel['id']}/threads/archived/private", False))
         for route, joined in paths:
             try:
-                archived = list_archived(route, headers, joined)
+                try:
+                    archived = list_archived(route, headers, joined)
+                except HTTPError as error:
+                    if error.code != 403 or not route.endswith("/private"): raise
+                    # Without MANAGE_THREADS, only joined private archives are visible.
+                    archived = list_archived(f"/channels/{channel['id']}/users/@me/threads/archived/private", headers, True)
             except HTTPError as error:
-                if error.code != 403 or not route.endswith("/private"): raise
-                # Without MANAGE_THREADS, only joined private archives are visible.
-                archived = list_archived(f"/channels/{channel['id']}/users/@me/threads/archived/private", headers, True)
+                if error.code not in (403, 404): raise
+                if skipped is not None:
+                    skipped.append({"guild_id": guild_id, "channel_id": channel.get("id"), "route": route, "status": error.code})
+                print(json.dumps({"guild_id": guild_id, "channel_id": channel.get("id"), "skipped_archives": route, "status": error.code}, sort_keys=True), file=sys.stderr, flush=True)
+                continue
             threads.extend(dict(row, guild_id=guild_id) for row in archived)
     threads = list({row["id"]: row for row in threads}.values())
     post_entities([entity(guild, "guild")] + [entity(row) for row in channels + threads])
@@ -323,10 +342,17 @@ def main():
             next_after = max((snowflake(row["id"], "guild.id") for row in available), key=int)
             if after and int(next_after) <= int(after): raise RuntimeError("Discord guild pagination did not advance")
             after = next_after
+    inserted = updated = 0; failures = []; skipped = SKIPPED_ARCHIVES; del skipped[:]
     if not requested_only:
         for guild_id in resolve_targets(guild_values, "guild"):
             # LIST FIRST: discover names, never implicitly select the guild's channels.
-            discover_guild(guild_id, token)
+            # One guild failing (deleted, bot kicked, Discord outage) is reported and
+            # the other guilds and the selected channels still run.
+            try:
+                discover_guild(guild_id, token)
+            except Exception as error:
+                failures.append({"channel_id": None, "guild_id": guild_id, "error": str(error)})
+                print(json.dumps({"guild_id": guild_id, "failed": True, "error": str(error)}, sort_keys=True), file=sys.stderr, flush=True)
     selection = pb_post("/api/discord/internal/selection", {})
     if not requested_only:
         if not selection["initialized"] and not selection.get("model_present"):
@@ -334,7 +360,6 @@ def main():
             selection = seed_selection(initial, token)
     requests = {row["entity_id"]: row["request_id"] for row in selection["requests"]}
     channels = list(dict.fromkeys(([] if requested_only else selection["selected"]) + list(requests)))
-    inserted = updated = 0; failures = []
     try:
         with state_lock(STATE_FILE):
             state = load_state(STATE_FILE)
@@ -353,7 +378,7 @@ def main():
     except Exception as error:
         failures.append({"channel_id": None, "error": str(error)})
     summary = {"complete": not failures, "inserted": inserted, "updated": updated,
-               "channels": len(channels), "failures": failures}
+               "channels": len(channels), "failures": failures, "skipped_archives": skipped}
     print(json.dumps(summary, sort_keys=True), flush=True)
     return 1 if failures else 0
 

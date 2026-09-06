@@ -103,4 +103,15 @@ function guildSummary(guildRows, channelRows, messageTotals, prefs) {
   return guilds
 }
 
-module.exports = Object.freeze({ SNOWFLAKE, MAX_IDS, EMPTY, normalizePrefs, mergePrefs, guildSummary })
+// Stored prefs from dc_settings (key "sidebar"), or null when never saved.
+// Lives here, not in the hook file: PocketBase runs every handler in its own
+// JS runtime, so a function defined at a hook file's top level is undefined
+// inside the handlers (measured: "sidebarPrefs is not defined").
+function readPrefs(app) {
+  const rows = app.findRecordsByFilter("dc_settings", "key = 'sidebar'", "", 1)
+  if (!rows.length) return null
+  // JSON fields read back as raw bytes; getString yields the JSON text.
+  try { return JSON.parse(rows[0].getString("value") || "null") } catch (_) { return null }
+}
+
+module.exports = Object.freeze({ SNOWFLAKE, MAX_IDS, EMPTY, normalizePrefs, mergePrefs, guildSummary, readPrefs })

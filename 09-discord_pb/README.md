@@ -34,10 +34,15 @@ not cause fallback to another service’s secrets.
   pair for manual login rather than trying to recover that generated password.
 - `auto_login`: **false by default**. When true, the sidebar dashboard signs in only via trusted ingress
   and an allowed HA user. “Open PocketBase admin” reuses that session.
-- `auto_login_ha_admins`: **false by default**. When true, any user admitted
-  to this `panel_admin: true` ingress panel may auto-login. Supervisor does not
-  send an admin boolean header; this option deliberately relies on HA's panel
-  admin gate, in addition to the add-on's ingress peer/path checks.
+- `auto_login_ha_admins`: **false by default**. When true, HA **administrators**
+  may auto-login. `panel_admin: true` is *not* the gate: it only hides the
+  sidebar entry, while every HA user can mint an ingress session and reach this
+  add-on with a real `X-Remote-User-Id` (measured against HA core and
+  Supervisor source, 2026-09-07). So the add-on asks HA core itself who the
+  administrators are: `ha_admins.py` (needs `homeassistant_api: true`) reads
+  `config/auth/list` through Supervisor every 5 minutes and writes owner and
+  `system-admin` user ids to `/run/discord-pb/ha-admins.json`; the hook denies
+  when the file is missing, older than 15 minutes, or does not list the user.
 - `auto_login_ha_user_ids`: comma-separated HA user IDs allowed superuser access;
   default empty (deny). A denied panel shows the received HA user ID/name, a copy
   button, and the exact option name so an administrator can configure it.
@@ -375,7 +380,9 @@ CommonJS build for JSVM's non-async runtime. No maw plugin is included.
 ### Upgrade gate (not executed)
 
 ```bash
-SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+# Run from the checkout you are actually shipping; the justfile does the same
+# rsync + update/rebuild + running-version check:  just deploy
+SRC="$(git rev-parse --show-toplevel)/09-discord_pb"
 rsync -az --exclude proof-local/ --exclude __pycache__/ \
   "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
 ssh kvmlab1.oracle.netbird \
@@ -488,7 +495,9 @@ existing `bot_token`, credentials and autologin choices. Example **options patch
 ```
 
 ```bash
-SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+# Run from the checkout you are actually shipping; the justfile does the same
+# rsync + update/rebuild + running-version check:  just deploy
+SRC="$(git rev-parse --show-toplevel)/09-discord_pb"
 rsync -az --exclude proof-local/ --exclude __pycache__/ \
   "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
 ssh kvmlab1.oracle.netbird \

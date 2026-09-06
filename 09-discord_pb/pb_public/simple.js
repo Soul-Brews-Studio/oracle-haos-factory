@@ -6,8 +6,13 @@
   const params=new URLSearchParams(location.search);
   const focusQuery=params.get('guild')||'';
   const focusOnly=focusQuery&&params.get('all')!=='1';
-  async function api(path,options={}){const response=await fetch('./'+path,{cache:'no-store',...options});const body=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(new Error(body.error||body.message||`Request failed (${response.status})`),{body});return body;}
-  async function signIn(){try{const fresh=await api('api/discord/admin-token',{method:'POST'});localStorage.setItem(KEY,JSON.stringify(fresh));return fresh.token;}catch(error){const saved=JSON.parse(localStorage.getItem(KEY)||'{}');if(!saved.token)throw error;const fresh=await api('api/collections/_superusers/auth-refresh',{method:'POST',headers:{Authorization:saved.token}});localStorage.setItem(KEY,JSON.stringify(fresh));return fresh.token;}}
+  async function rawApi(path,options={}){const response=await fetch('./'+path,{cache:'no-store',...options});const body=await response.json().catch(()=>({}));if(!response.ok)throw Object.assign(new Error(body.error||body.message||`Request failed (${response.status})`),{body,status:response.status});return body;}
+  async function signIn(){try{const fresh=await rawApi('api/discord/admin-token',{method:'POST'});localStorage.setItem(KEY,JSON.stringify(fresh));return fresh.token;}catch(error){const saved=JSON.parse(localStorage.getItem(KEY)||'{}');if(!saved.token)throw error;const fresh=await rawApi('api/collections/_superusers/auth-refresh',{method:'POST',headers:{Authorization:saved.token}});localStorage.setItem(KEY,JSON.stringify(fresh));return fresh.token;}}
+  // Superuser tokens live 300 s (050_bootstrap). Every authenticated call reads
+  // the current token, and a 401 signs in again once and retries, so a room
+  // opened after six minutes still loads instead of showing an auth error.
+  const tokenRef={current:''};
+  async function api(path,options={}){const send=()=>rawApi(path,{...options,headers:{...(options.headers||{}),...(tokenRef.current?{Authorization:tokenRef.current}:{})}});try{return await send();}catch(error){if(error.status!==401||!tokenRef.current)throw error;tokenRef.current=await signIn();return await send();}}
   // When this page is embedded in a Home Assistant dashboard (iframe strategy),
   // keep the ingress session alive the same way the HA ingress panel does. Any
   // failure (not embedded, cross-origin, no hass) is silent: the page still works.
@@ -30,7 +35,7 @@
   function RoomRow({room,depth,active,choose,guild}) {
     const isActive=active?.id===room.id, muted=room.importable===false;
     return c('div',{key:room.id},
-      c('button',{type:'button','data-entity-id':room.id,disabled:muted,title:muted?room.name+' · not importable (voice/forum container)':room.name+' · '+room.id,onClick:()=>choose(room,room.kind,guild),
+      c('button',{type:'button','data-entity-id':room.id,disabled:muted,title:muted?room.name+' · not importable (voice/forum container)':room.name+' · '+room.id,onClick:()=>choose(room,guild),
         className:'flex w-full items-center gap-1 py-1.5 pr-3 text-left text-sm '+(depth?'pl-8':'px-3')+' '+(isActive?'bg-slate-700 font-semibold text-white':muted?'text-slate-600 cursor-default':'text-slate-300 hover:bg-slate-700')},
         c('span',{className:'w-5 text-center text-slate-500'},room.icon||'#'),
         c('span',{className:'min-w-0 flex-1 truncate'},room.name),
@@ -55,7 +60,7 @@
           c('span',{className:'min-w-0 flex-1 truncate text-sm font-bold text-white'},guild.name),
           c('span',{className:'text-[10px] tabular-nums text-slate-500',title:guild.channel_count+' rooms · '+(guild.imported_count||0)+' messages'},guild.imported_count||0)),
         c('button',{type:'button',title:'Hide '+guild.name+' from the sidebar','aria-label':'Hide '+guild.name,onClick:()=>setHidden(guild,true),className:btn},'⊘')),
-      open?(guild.categories.length?guild.categories.map(category=>c(Category,{key:category.id||'root',category,guild:guild.name,active,choose,toggle:toggleCategory}))
+      open?(guild.categories.length?guild.categories.map(category=>c(Category,{key:category.id||'root',category,guild,active,choose,toggle:toggleCategory}))
         :c('p',{className:'px-4 py-2 text-xs text-slate-500'},'No rooms discovered yet.')):null);
   }
   function HiddenServers({guilds,setHidden}) {
@@ -115,24 +120,26 @@
   }
   function App(){
     const [token,setToken]=useState(''),[data,setData]=useState(null),[active,setActive]=useState(null),[messages,setMessages]=useState([]),[state,setState]=useState('Connecting through Home Assistant…'),[query,setQuery]=useState(''),[drawer,setDrawer]=useState(false),[servers,setServers]=useState(false),[now,setNow]=useState(Date.now()),[saveState,setSaveState]=useState('');
-    const tokenRef=useRef('');
     useEffect(()=>{const interval=setInterval(()=>setNow(Date.now()),30000);const stop=keepIngressAlive();return()=>{clearInterval(interval);stop();};},[]);
+    // Re-sign every 60 s while the tab is visible so the 300 s token never lapses mid-read.
+    useEffect(()=>{if(!token)return;const refresh=setInterval(async()=>{if(document.hidden)return;try{tokenRef.current=await signIn();}catch(_){}},60000);return()=>clearInterval(refresh);},[token]);
     const guilds=useMemo(()=>data?window.DCSimpleTree.buildSidebar(data):[],[data]);
     const focus=useMemo(()=>focusOnly?window.DCSimpleTree.findGuild(guilds,focusQuery):null,[guilds]);
-    useEffect(()=>{(async()=>{try{const fresh=await signIn();tokenRef.current=fresh;setToken(fresh);const payload=await api('api/dc/sidebar',{headers:{Authorization:fresh}});setData(payload);
+    useEffect(()=>{(async()=>{try{const fresh=await signIn();tokenRef.current=fresh;setToken(fresh);const payload=await api('api/dc/sidebar');setData(payload);
       const built=window.DCSimpleTree.buildSidebar(payload);const start=window.DCSimpleTree.findGuild(built,focusQuery)||built.find(g=>!g.hidden&&g.open)||built.find(g=>!g.hidden)||built[0];
       const first=start&&window.DCSimpleTree.firstRoom(start);if(first)setActive({id:first.id,name:first.name,kind:first.kind,guild:start.name,guild_id:start.id});
       const visible=built.filter(g=>!g.hidden).length;setState(`${visible} of ${built.length} servers · ${payload.channels.length} rooms`+(payload.model_error?' · model invalid':''));}
-      catch(error){setState(error.body?.haUser?`Home Assistant user ${error.body.haUser.id||''} is not allowed.`:error.message);}})();},[]);
-    useEffect(()=>{if(!token||!active)return;let dead=false;(async()=>{try{setState(`Loading #${active.name}…`);const filter=active.kind==='thread'?`thread_id=${JSON.stringify(active.id)}`:`channel_id=${JSON.stringify(active.id)} && (thread_id='' || thread_id=null)`;const result=await api('api/collections/discord_messages/records?'+new URLSearchParams({page:'1',perPage:'100',sort:'-ts,-message_id',filter}),{headers:{Authorization:token}});if(!dead){setMessages(result.items||[]);setState(`${result.totalItems||0} messages in #${active.name}`);}}catch(error){if(!dead)setState(error.message);}})();return()=>{dead=true};},[token,active]);
-    // Optimistic preference writes: the tree updates at once, the server answer
-    // (or its refusal) replaces it afterwards.
-    const savePrefs=async(patch,next)=>{setData(prev=>({...prev,prefs:next(prev.prefs)}));setSaveState('saving');try{const result=await api('api/dc/sidebar',{method:'POST',headers:{Authorization:tokenRef.current,'Content-Type':'application/json'},body:JSON.stringify(patch)});setData(prev=>({...prev,prefs:result.prefs}));setSaveState('');}catch(error){setSaveState('not saved: '+error.message);}};
+      catch(error){setState(error.body?.haUser?`Home Assistant user ${error.body.haUser.id||''} is not allowed: ${error.message}`:error.message);}})();},[]);
+    useEffect(()=>{if(!token||!active)return;let dead=false;(async()=>{try{setState(`Loading #${active.name}…`);const filter=active.kind==='thread'?`thread_id=${JSON.stringify(active.id)}`:`channel_id=${JSON.stringify(active.id)} && (thread_id='' || thread_id=null)`;const result=await api('api/collections/discord_messages/records?'+new URLSearchParams({page:'1',perPage:'100',sort:'-ts,-message_id',filter}));if(!dead){setMessages(result.items||[]);setState(`${result.totalItems||0} messages in #${active.name}`);}}catch(error){if(!dead)setState(error.message);}})();return()=>{dead=true};},[token,active]);
+    // Optimistic preference writes: the tree updates at once; the server answer
+    // replaces it, and a refusal restores the snapshot taken before the click.
+    const savePrefs=async(patch,next)=>{let snapshot=null;setData(prev=>{snapshot=prev.prefs;return{...prev,prefs:next(prev.prefs)};});setSaveState('saving');try{const result=await api('api/dc/sidebar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});setData(prev=>({...prev,prefs:result.prefs}));setSaveState('');}catch(error){setData(prev=>({...prev,prefs:snapshot||prev.prefs}));setSaveState('not saved: '+error.message);}};
     const setOpen=(guild,open)=>savePrefs({open:{[guild.id]:open}},prefs=>({...prefs,open:{...prefs.open,[guild.id]:open}}));
     const setHidden=(guild,hidden)=>savePrefs(hidden?{hide:[guild.id]}:{show:[guild.id]},prefs=>({...prefs,hidden:hidden?[...prefs.hidden.filter(id=>id!==guild.id),guild.id]:prefs.hidden.filter(id=>id!==guild.id)}));
     const toggleCategory=(category)=>savePrefs({collapsed:{[category.id]:!category.collapsed}},prefs=>({...prefs,collapsed:{...prefs.collapsed,[category.id]:!category.collapsed}}));
     const order=(guild,delta)=>{const ids=guilds.map(g=>g.id);const index=ids.indexOf(guild.id),target=index+delta;if(target<0||target>=ids.length)return;ids.splice(index,1);ids.splice(target,0,guild.id);savePrefs({order:ids},prefs=>({...prefs,order:ids}));};
-    const choose=(node,kind,guildName)=>{const guild=guilds.find(g=>g.name===guildName);setActive({id:node.id,name:node.name,kind,guild:guildName,guild_id:guild?.id});setDrawer(false);};
+    // The guild object travels with the click: names can repeat, ids cannot.
+    const choose=(node,guild)=>{setActive({id:node.id,name:node.name,kind:node.kind,guild:guild.name,guild_id:guild.id});setDrawer(false);};
     const pick=(guild)=>{if(!guild.open)setOpen(guild,true);const first=window.DCSimpleTree.firstRoom(guild);if(first)setActive({id:first.id,name:first.name,kind:first.kind,guild:guild.name,guild_id:guild.id});requestAnimationFrame(()=>document.getElementById('guild-'+guild.id)?.scrollIntoView({block:'start',behavior:'smooth'}));};
     const navigation=c(RoomTree,{guilds,active,query,setQuery,choose,setOpen,setHidden,toggleCategory,focus,status:saveState||state});
     return c('div',{className:'flex h-[100dvh] min-w-0 overflow-hidden bg-ink'},

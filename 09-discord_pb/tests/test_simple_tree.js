@@ -44,6 +44,16 @@ assert.equal(guilds[0].open, false); assert.equal(alpha.open, true);
 assert.equal(guilds[2].hidden, true);
 assert.equal(guilds[0].categories[0].name, '', 'a category from another guild is not trusted');
 assert.equal(firstRoom(alpha).name, 'news', 'first importable room, voice skipped');
+const rich = buildSidebar({guilds:[{id:G1,name:'r'}], channels:[
+  {id:'1000000000000000011',kind:'channel',name:'lobby',guild_id:G1,discord_type:2,position:0,importable:false,imported_count:900},
+  {id:'1000000000000000012',kind:'channel',name:'empty',guild_id:G1,discord_type:0,position:1,importable:true,imported_count:0},
+  {id:'1000000000000000013',kind:'channel',name:'busy',guild_id:G1,discord_type:0,position:2,importable:true,imported_count:401},
+  {id:'1000000000000000014',kind:'channel',name:'polled',guild_id:G1,discord_type:0,position:3,importable:true,imported_count:3,selected:true},
+], prefs:{}});
+assert.equal(firstRoom(rich[0]).name, 'polled', 'a polled room wins');
+rich[0].categories[0].channels.find(c=>c.name==='polled').selected = false;
+assert.equal(firstRoom(rich[0]).name, 'busy', 'then the room with the most archived messages');
+assert.equal(firstRoom({categories:[{id:'',channels:[{id:'x',name:'v',importable:false}]}]}), null);
 assert.equal(findGuild(guilds, G1).name, 'Alpha');
 assert.equal(findGuild(guilds, 'alpha').id, G1);
 assert.equal(findGuild(guilds, 'ET').id, G2, 'substring fallback');

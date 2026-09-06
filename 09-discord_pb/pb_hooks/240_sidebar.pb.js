@@ -2,18 +2,13 @@
 // Server-by-server sidebar: one call returns every guild with counts, every
 // channel/thread with its Discord category and position, and the shared
 // open/hidden preferences. Preferences persist in dc_settings (key "sidebar").
-
-function sidebarPrefs(app) {
-  const rows = app.findRecordsByFilter("dc_settings", "key = 'sidebar'", "", 1)
-  if (!rows.length) return null
-  try { return JSON.parse(JSON.stringify(rows[0].get("value"))) } catch (_) { return null }
-}
+// Every handler requires its helpers itself: handlers run in isolated runtimes.
 
 routerAdd("GET", "/api/dc/sidebar", (e) => {
   e.response.header().set("Cache-Control", "no-store")
   const helper = require(`${__hooks}/lib/dc_api.js`), sidebar = require(`${__hooks}/lib/dc_sidebar.js`)
   try {
-    const prefs = sidebar.normalizePrefs(sidebarPrefs($app))
+    const prefs = sidebar.normalizePrefs(sidebar.readPrefs($app))
     const guildRows = helper.entityRows($app, true)
     const guildNames = {}
     for (const row of guildRows) guildNames[row.entity_id] = row.name
@@ -38,10 +33,13 @@ routerAdd("GET", "/api/dc/sidebar", (e) => {
     // Selection follows the declared model when it exists (cached compile), and
     // the checkbox table otherwise. A broken model is reported, not hidden.
     let selected = {}, modelError = null
-    const model = helper.liveModel($app)
-    if (model.ok && model.exists && model.channels) for (const id of Object.keys(model.channels)) if (model.channels[id].import) selected[id] = true
-    else if (model.ok) selected = helper.selectedMap($app)
-    else { modelError = model.error || "validation failed"; selected = helper.selectedMap($app) }
+    const model = helper.getModel($app)
+    if (model.ok && model.exists && model.channels) {
+      for (const id of Object.keys(model.channels)) if (model.channels[id].import) selected[id] = true
+    } else {
+      if (!model.ok) modelError = model.error || "validation failed"
+      selected = helper.selectedMap($app)
+    }
 
     const channels = rows.map((row) => ({
       id: row.entity_id, kind: row.kind, name: row.name, guild_id: row.guild_id, guild: guildNames[row.guild_id] || row.guild_id,
@@ -51,7 +49,12 @@ routerAdd("GET", "/api/dc/sidebar", (e) => {
     }))
     const guilds = sidebar.guildSummary(guildRows, channels, totals, prefs)
     return e.json(200, { ok: true, guilds, channels, prefs, model_error: modelError })
-  } catch (error) { return helper.jsonError(e, error) }
+  } catch (error) {
+    // The client only ever sees the generic message for a 500; the cause goes to
+    // PocketBase's own log so an operator can read it from the admin UI.
+    if (!(error && Number.isInteger(error.status))) $app.logger().error("dc sidebar failed", "error", String(error && error.stack || error))
+    return helper.jsonError(e, error)
+  }
 }, $apis.requireSuperuserAuth())
 
 routerAdd("POST", "/api/dc/sidebar", (e) => {
@@ -59,7 +62,7 @@ routerAdd("POST", "/api/dc/sidebar", (e) => {
   const helper = require(`${__hooks}/lib/dc_api.js`), sidebar = require(`${__hooks}/lib/dc_sidebar.js`)
   try {
     let merged
-    try { merged = sidebar.mergePrefs(sidebarPrefs($app), e.requestInfo().body) }
+    try { merged = sidebar.mergePrefs(sidebar.readPrefs($app), e.requestInfo().body) }
     catch (error) { throw helper.apiError(400, String(error.message || error)) }
     // Only ids the archive knows about can be hidden or reordered; a stale id
     // from another browser is dropped rather than stored forever.
@@ -73,5 +76,10 @@ routerAdd("POST", "/api/dc/sidebar", (e) => {
       record.set("key", "sidebar"); record.set("value", merged); app.save(record)
     })
     return e.json(200, { ok: true, prefs: merged })
-  } catch (error) { return helper.jsonError(e, error) }
+  } catch (error) {
+    // The client only ever sees the generic message for a 500; the cause goes to
+    // PocketBase's own log so an operator can read it from the admin UI.
+    if (!(error && Number.isInteger(error.status))) $app.logger().error("dc sidebar failed", "error", String(error && error.stack || error))
+    return helper.jsonError(e, error)
+  }
 }, $apis.requireSuperuserAuth())

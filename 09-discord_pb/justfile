@@ -21,6 +21,9 @@ slug     := "local_discord_pb"
 addon    := "/addons/discord_pb"
 ha-user  := env_var_or_default("DC_HA_USER", "")
 ha-pw    := env_var_or_default("DC_HA_PASSFILE", "")
+# dc_model.py needs PyYAML; the system python usually lacks it. Point DC_PYTHON
+# at a venv (uv venv .venv && uv pip install --python .venv/bin/python pyyaml).
+py       := env_var_or_default("DC_PYTHON", "python3")
 sidebar  := "bun tools/ha-sidebar.ts --ip " + box + " --user " + ha-user + " --pass-file " + ha-pw
 
 _default:
@@ -32,7 +35,7 @@ _default:
 verify:
     git branch --show-current | grep -Eq '^lab/[0-9]+-discord' || { echo "✗ not on a lab/*-discord* branch"; exit 1; }
     git log --oneline origin/main..HEAD -- .
-    python3 -m unittest discover -s tests -p 'test_*.py' -v
+    {{py}} -m unittest discover -s tests -p 'test_*.py' -v
     node tests/test_dc_api.js
     node tests/test_live_ingest.js
     node tests/test_timeline.js
@@ -40,6 +43,7 @@ verify:
     node tests/test_import_activity.js
     node tests/test_simple_tree.js
     node tests/test_sidebar.js
+    node tests/test_ha_admins.js
     bun test sdk/dc.test.ts
     tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
@@ -52,10 +56,13 @@ verify:
 test:
     node tests/test_simple_tree.js
     node tests/test_sidebar.js
+    node tests/test_ha_admins.js
     node tests/test_dc_api.js
     node tests/test_timeline.js
+    {{py}} -m unittest tests.test_ha_admins tests.test_service tests.test_backfill tests.test_selection tests.test_model -q 2>&1 | tail -3
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
-    python3 -m py_compile backfill.py service.py dc_model.py gateway.py gateway_ws.py
+    python3 -m py_compile backfill.py service.py dc_model.py gateway.py gateway_ws.py ha_admins.py
+    bash -n run.sh rootfs/etc/services.d/discord-gateway/run rootfs/etc/services.d/ha-admins/run
 
 proof:
     ./tests/local-proof.sh
@@ -104,6 +111,21 @@ logs N="40":
 # Add-on state, version, ingress entry — read from the guest, secrets untouched.
 status:
     @ssh "{{box}}" "ha apps info {{slug}}" | grep -E '^(state|version|version_latest|ingress_entry|ingress_panel):'
+
+# ── options (⚠ changes live state; every secret stays on the guest) ───────────
+
+# Show options with every secret redacted (bot_token, admin_password).
+options:
+    @ssh "{{box}}" 'curl -sS -H "Authorization: Bearer $SUPERVISOR_TOKEN" http://supervisor/addons/{{slug}}/info | jq -r ".data.options | to_entries | map(.key + \"=\" + (if (.key|test(\"password|token|secret\";\"i\")) then \"<set,\" + ((.value|tostring|length)|tostring) + \" chars>\" else (.value|tostring) end)) | .[]"'
+
+# Supervisor REPLACES the options object wholesale, so this reads the current
+# set on the guest, edits one key there, and posts the whole object back — the
+# secrets never leave the box and never enter this shell.
+# Set one option, preserving all the others: just set-option auto_login_ha_user_ids <ha user id>
+set-option KEY VALUE:
+    @ssh "{{box}}" 'CUR=$(curl -sS -H "Authorization: Bearer $SUPERVISOR_TOKEN" http://supervisor/addons/{{slug}}/info | jq -c ".data.options"); NEW=$(echo "$CUR" | jq -c --arg v "{{VALUE}}" ".{{KEY}} = (\$v | if . == \"true\" then true elif . == \"false\" then false elif test(\"^[0-9]+$\") then tonumber else . end)"); echo "{\"options\": $NEW}" | curl -sS -X POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" -H "Content-Type: application/json" --data @- http://supervisor/addons/{{slug}}/options | jq -r ".result"'
+    @just restart
+    @just options
 
 # ── Home Assistant sidebar (one entry per Discord server) ──────────────────────
 

@@ -94,9 +94,17 @@
     return guilds.find(guild => text(guild.name).toLowerCase() === folded) || guilds.find(guild => text(guild.name).toLowerCase().includes(folded)) || null;
   }
 
+  // The room to open when a server is picked: a polled room first, then the
+  // room holding the most archived messages, then the first importable one —
+  // an archive should open on something readable, not on an empty #general.
   function firstRoom(guild) {
-    for (const category of guild && guild.categories || []) for (const channel of category.channels) if (channel.importable !== false) return channel;
-    return null;
+    const rooms = [];
+    for (const category of guild && guild.categories || []) for (const channel of category.channels) if (channel.importable !== false) rooms.push(channel);
+    if (!rooms.length) return null;
+    const polled = rooms.find(room => room.selected);
+    if (polled) return polled;
+    const richest = rooms.reduce((best, room) => (Number(room.imported_count) || 0) > (Number(best.imported_count) || 0) ? room : best, rooms[0]);
+    return (Number(richest.imported_count) || 0) > 0 ? richest : rooms[0];
   }
 
   return {buildTree, buildSidebar, findGuild, firstRoom, iconFor};

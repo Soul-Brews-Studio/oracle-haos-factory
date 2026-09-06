@@ -1,5 +1,5 @@
 name: "Discord PocketBase"
-version: "0.2.0"
+version: "0.2.1"
 slug: "discord_pb"
 description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/03-discord-sidebar-kvmlab1/09-discord_pb"
@@ -8,7 +8,7 @@ startup: application
 boot: auto
 init: false
 hassio_api: false
-homeassistant_api: false
+homeassistant_api: true
 host_network: false
 ingress: true
 ingress_port: 8110
