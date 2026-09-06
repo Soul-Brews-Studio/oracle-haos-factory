@@ -184,3 +184,36 @@ Count parity can legitimately differ when Discord permissions/history change;
 and allowlisted user IDs must be validated at the future authorized install.
 
 Signed `[37-6sep-sun2026:01-discord-pb-kvmlab1]`
+
+## v0.1.4 — persistent sidebar and authenticated importer
+
+Fresh local validation (2026-09-06):
+- ARM64 image built with pinned PocketBase 0.29.3.
+- 21 unit tests passed; shellcheck, shell syntax, JS syntax, diff checks passed.
+- Default-entrypoint fixture: LOCAL PROOF PASS, 214 fixture rows, restart
+  persistence, incremental replay zero inserts, source DB/WAL/SHM unchanged.
+- Import API probe: guests, invalid tokens and a real regular-user token denied;
+  atomic invalid batches, retry idempotence, routing/created_at and cursor preservation passed.
+- Existing admin browser proof: protected records/auth-refresh 200; unrelated
+  Petkeeper storage sentinels unchanged.
+- New dashboard browser proof: stays on panel.html; 20 visible rows, 4 name matches;
+  guest import denied, invalid batch 400, backfill status 200/queue 202;
+  UI import reports **0 inserted, 1 updated** for an existing fixture message.
+- Desktop 1280px and mobile 390px screenshots show no horizontal overflow.
+  [Checks](evidence/panel-check.json),
+  [desktop](evidence/panel-desktop.png), [mobile](evidence/panel-mobile.png).
+  UI static detector ran in degraded regex mode (parser dependencies unavailable);
+  browser checks and screenshot review provide the layout evidence.
+
+Reproduce after building the proof image:
+```sh
+just verify
+./tests/local-proof.sh --keep
+./tests/browser-proof.sh
+./tests/panel-proof.sh
+```
+
+These are local fixtures, not proof of live Discord backfill. At deployment
+preflight kvmlab1 had no bot_token, channels, or guilds configured and zero
+messages. Deployment does not inject synthetic messages, alter options, or
+borrow credentials from another add-on.

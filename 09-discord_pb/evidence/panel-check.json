@@ -1,0 +1,13 @@
+{
+  "staysOnDashboard": true,
+  "visibleMessages": 20,
+  "guestImportDenied": true,
+  "jobStatus": 200,
+  "jobConfigured": true,
+  "jobState": "succeeded",
+  "queueStatus": 202,
+  "invalidBatchStatus": 400,
+  "petkeeperAuthUnchanged": true,
+  "uiImport": "0 inserted, 1 updated",
+  "nameLookup": 4
+}

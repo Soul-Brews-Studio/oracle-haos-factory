@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -31,12 +32,23 @@ def options(path):
     return data
 
 
+def write_job(path, state, started_at=None):
+    value = {"state": state, "started_at": started_at}
+    if state in ("succeeded", "failed", "idle"):
+        value["finished_at"] = datetime.now(timezone.utc).isoformat()
+    temporary = Path(str(path) + ".tmp")
+    temporary.write_text(json.dumps(value))
+    temporary.chmod(0o600)
+    temporary.replace(path)
+
+
 def main():
     config = options(os.environ.get("DISCORD_PB_OPTIONS", "/data/options.json"))
     env = os.environ.copy()
     # Keep Discord credentials out of PB's environment and process arguments.
     env.pop("DISCORD_BOT_TOKEN", None)
     env.update(DISCORD_PB_INTERNAL_TOKEN=secrets.token_urlsafe(32),
+               DISCORD_PB_BACKFILL_READY=str(bool((config.get("bot_token") or env.get("DISCORD_PB_FIXTURE") == "true") and (config.get("channels") or config.get("guilds")))).lower(),
                DISCORD_PB_ADMIN_EMAIL=config.get("admin_email") or "admin@discord-pb.local",
                DISCORD_PB_ADMIN_PASSWORD=config.get("admin_password") or secrets.token_urlsafe(40),
                DISCORD_PB_SET_PASSWORD=str(bool(config.get("admin_password"))).lower(),
@@ -47,6 +59,9 @@ def main():
     pb = subprocess.Popen(["/pb/pocketbase", "serve", "--http=0.0.0.0:8110", "--dir=/data/pb_data",
         "--hooksDir=/pb/pb_hooks", "--migrationsDir=/pb/pb_migrations", "--publicDir=/pb/pb_public",
         "--hooksWatch=false"], env=env)
+    job_path = Path("/data/backfill-job.json")
+    request_path = Path("/data/backfill-request")
+    write_job(job_path, "idle")
     stopped = False
     worker = None
 
@@ -78,14 +93,23 @@ def main():
         backfill_env["DISCORD_CHANNELS"] = config.get("channels") or ""
         backfill_env["DISCORD_GUILDS"] = config.get("guilds") or ""
         due = 0
+        started_at = None
         while not stopped:
             if pb.poll() is not None:
                 raise RuntimeError("PocketBase exited unexpectedly")
-            if time.monotonic() >= due and worker is None:
-                worker = subprocess.Popen([sys.executable, "/app/backfill.py"], env=backfill_env)
+            if (time.monotonic() >= due or request_path.exists()) and worker is None:
+                request_path.unlink(missing_ok=True)
+                if env["DISCORD_PB_BACKFILL_READY"] != "true":
+                    write_job(job_path, "idle")
+                    due = time.monotonic() + config.get("poll_minutes", 60) * 60
+                else:
+                    started_at = datetime.now(timezone.utc).isoformat()
+                    write_job(job_path, "running", started_at)
+                    worker = subprocess.Popen([sys.executable, "/app/backfill.py"], env=backfill_env)
             if worker is not None and worker.poll() is not None:
                 if worker.returncode:
                     print("backfill failed; next scheduled attempt will replay safely", flush=True)
+                write_job(job_path, "succeeded" if worker.returncode == 0 else "failed", started_at)
                 worker = None
                 due = time.monotonic() + config.get("poll_minutes", 60) * 60
             time.sleep(.2)

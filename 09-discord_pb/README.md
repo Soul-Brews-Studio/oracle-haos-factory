@@ -5,9 +5,9 @@ A **new local HAOS add-on**: checksum-pinned PocketBase **0.29.3**, private
 Discord REST backfill. No maw-atlas code is vendored. Code and migrations ship
 inside the image; database and backfill cursors persist in `/data`.
 
-**STOP before Supervisor installation or real bot-token handling.** This branch
-is local proof only, not a deployed archive. Nat supplies the bot token via
-Supervisor add-on options after the explicit install gate.
+Deployment is limited to the authorized `local_discord_pb` add-on on kvmlab1.
+Nat supplies the bot token through Supervisor options; missing credentials do
+not cause fallback to another service’s secrets.
 
 ## Options and permissions
 
@@ -26,8 +26,8 @@ Supervisor add-on options after the explicit install gate.
   Runtime bootstrap never puts passwords in argv or emits first-run token URLs.
   With neither, an add-on-local superuser gets a random password; configure the
   pair for manual login rather than trying to recover that generated password.
-- `auto_login`: **false by default**. When true, the panel opens the embedded
-  admin already signed in only via trusted ingress and an allowed HA user.
+- `auto_login`: **false by default**. When true, the sidebar dashboard signs in only via trusted ingress
+  and an allowed HA user. “Open PocketBase admin” reuses that session.
 - `auto_login_ha_admins`: **false by default**. When true, any user admitted
   to this `panel_admin: true` ingress panel may auto-login. Supervisor does not
   send an admin boolean header; this option deliberately relies on HA's panel
@@ -153,3 +153,37 @@ Zero-count or malformed HTTP success bodies cannot produce a false green.
   [JS migrations](https://pocketbase.io/docs/js-migrations/),
   [HA ingress](https://developers.home-assistant.io/docs/apps/presentation/),
   [HA ingress identity](https://developers.home-assistant.io/docs/apps/security/).
+
+## Sidebar and import API (v0.1.4)
+
+HA ingress opens `/panel.html`: recent private messages with names/IDs,
+pagination and channel/thread filtering, name lookup, and explicit backfill/import
+actions. The legacy root still opens PocketBase admin. Refresh the HA page after
+upgrading to pick up the new ingress entry.
+
+`POST /api/discord/import` requires a normal PocketBase **superuser** bearer token.
+It accepts `{"messages": [...]}`, at most 100 normalized rows, and commits each
+batch atomically. Retrying upserts by `message_id`; original `created_at`,
+routing fields, and backfill cursors remain unchanged. Unknown fields and numeric
+snowflakes are rejected. The UI previews the file count before an explicit import.
+An import does not discover entity names: those are populated by Discord backfill.
+
+```sh
+# PB_URL is your authorized API URL; keep the short-lived token out of logs.
+curl --fail-with-body "$PB_URL/api/discord/import" \
+  -H "Authorization: $PB_SUPERUSER_TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @batch.json
+```
+
+Minimum normalized row (IDs shown here are examples, not real archive data):
+
+```json
+{"messages":[{"message_id":"900000000000000001","channel_id":"900000000000000002","author_id":"900000000000000003","ts":"2026-09-06T00:00:00Z","content":"Example"}]}
+```
+
+Authenticated records APIs support direct reads and normal PocketBase writes;
+prefer the importer for idempotence/validation. No raw SQL or database-file
+endpoint is exposed. `GET /api/discord/backfill` shows job/configuration state;
+`POST /api/discord/backfill` queues the configured worker (superusers only).
+Repeated requests coalesce and never run concurrent workers. Without a bot token
+and targets, it returns 409 and the panel explains which options are missing.

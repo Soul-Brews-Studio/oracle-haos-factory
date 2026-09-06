@@ -5,8 +5,8 @@ verify:
     test "$(git branch --show-current)" = lab/01-discord-pb-kvmlab1
     git log --oneline origin/main..HEAD -- .
     python3 -m unittest discover -s tests -p 'test_*.py' -v
-    bash -n run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh
-    shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh
+    bash -n run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh
+    shellcheck run.sh verify.sh tests/local-proof.sh tests/browser-proof.sh tests/panel-proof.sh
     git diff --check -- .
 
 proof:

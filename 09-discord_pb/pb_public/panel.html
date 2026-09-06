@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Discord Archive</title>
+  <link rel="stylesheet" href="./panel.css">
+  <script src="./panel.js" defer></script>
+</head>
+<body>
+<header>
+  <div><h1>Discord Archive</h1><p id="archive-status">Connecting to the archive…</p></div>
+  <nav aria-label="Archive tools"><a href="./_/" id="admin-link">Open PocketBase admin</a><button id="refresh" type="button">Refresh</button></nav>
+</header>
+<main>
+  <p id="login-status" role="status" aria-live="polite">Checking your sidebar session…</p>
+  <section id="identity" hidden aria-labelledby="identity-title">
+    <h2 id="identity-title">Allow your Home Assistant user</h2>
+    <p><span id="ha-user-name"></span> <code id="ha-user-id"></code></p>
+    <button id="copy-user-id" type="button">Copy user ID</button>
+    <p>Paste the ID into <code>auto_login_ha_user_ids</code>, enable <code>auto_login</code>, then restart this add-on. If no ID arrived, reopen the panel from Home Assistant.</p>
+  </section>
+  <div class="workspace">
+    <section aria-labelledby="messages-title" class="messages">
+      <div class="section-heading"><h2 id="messages-title">Recent messages</h2><span id="page-label"></span></div>
+      <form id="message-filter">
+        <label for="channel-filter">Channel or thread ID</label>
+        <div class="input-row"><input id="channel-filter" inputmode="numeric" pattern="[0-9]{17,20}" placeholder="All channels"><button id="filter-button" disabled>Filter</button></div>
+      </form>
+      <p id="message-status" role="status">Sign in through Home Assistant to read private messages.</p>
+      <ol id="messages"></ol>
+      <div class="pagination"><button id="previous" disabled>Previous</button><button id="next" disabled>Next</button></div>
+    </section>
+    <aside>
+      <section aria-labelledby="find-title">
+        <h2 id="find-title">Find a name → ID</h2>
+        <form id="entity-find"><label for="entity-name">Guild, channel, or thread name</label>
+          <div class="input-row"><input id="entity-name" required maxlength="120" placeholder="general"><button id="find-button" disabled>Find</button></div>
+        </form>
+        <p class="hint">Names can repeat. Check the exact ID and parent before choosing a target.</p>
+        <div id="entity-result" role="status"></div>
+      </section>
+      <section aria-labelledby="load-title">
+        <h2 id="load-title">Load data</h2>
+        <h3>Backfill from Discord</h3>
+        <p id="backfill-status">Checking backfill configuration…</p>
+        <button id="backfill" disabled>Run backfill now</button>
+        <h3>Import a JSON batch</h3>
+        <p class="hint">Up to 100 normalized messages per batch, 2 MiB maximum. Matching message IDs update existing rows. Importing does not advance Discord backfill cursors.</p>
+        <label for="import-file">JSON file</label><input id="import-file" type="file" accept=".json,application/json" disabled>
+        <p id="import-preview" role="status">Choose a file to preview its row count.</p>
+        <button id="import-button" disabled>Import messages</button>
+        <p id="import-result" role="status" aria-live="polite"></p>
+        <details><summary>Direct database API</summary>
+          <p>Use a PocketBase superuser token with <code>POST api/discord/import</code>. Send the same normalized JSON batch used here:</p>
+          <pre>{"messages": [{
+  "message_id": "…",
+  "channel_id": "…",
+  "author_id": "…",
+  "ts": "2026-09-06T00:00:00Z",
+  "content": "…"
+}]}</pre>
+          <p class="hint">IDs must be strings containing 17–20 digits. Optional fields include thread_id, guild_id, author_name, attachments_json, embeds and raw. No raw SQL access or unauthenticated writes.</p>
+          <p><code>GET api/collections/discord_messages/records</code> reads messages. <code>GET api/collections/discord_entities/records</code> resolves names. Both require authentication.</p>
+        </details>
+      </section>
+    </aside>
+  </div>
+</main>
+<footer>Stored in this add-on’s PocketBase. Message content is displayed as text, never executed.</footer>
+</body>
+</html>
