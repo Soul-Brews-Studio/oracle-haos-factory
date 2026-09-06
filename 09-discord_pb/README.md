@@ -165,6 +165,30 @@ Zero-count or malformed HTTP success bodies cannot produce a false green.
   [HA ingress](https://developers.home-assistant.io/docs/apps/presentation/),
   [HA ingress identity](https://developers.home-assistant.io/docs/apps/security/).
 
+## Central timeline (v0.3.0)
+
+`/timeline.html` is the monitoring view: **one clock, every server**. Each row
+says *when* (Bangkok time, plus relative), *what* (message with edited/deleted/
+attachment badges, thread created or archived, import completed) and *where*
+(Server › Category › #channel ↳ thread, a link that opens that room in the
+rooms view via `simple.html?guild=…&room=…`). A system strip shows the Discord
+gateway live state and the last backfill run. With **Live** on, the page
+subscribes to PocketBase realtime on `discord_messages` and new, edited or
+deleted messages appear at the top without a reload, resolved to the same
+server/channel names as loaded rows.
+
+- `GET /api/dc/timeline` (superuser): `since`/`before` (ISO), `limit` (1–200),
+  `guilds` (comma list of ids, max 50), `kinds` (subset of
+  `message,thread,import`), `q` (text or author, max 120, LIKE-escaped).
+  Messages page with `before=<next_before>`; threads and imports ride along
+  with the first page of the window. Returns `events[]`, `next_before`,
+  `has_more`, `window`, `system`.
+- Filters: time window (1h, 24h, 7d, 30d, all), event kinds, free text, and
+  server chips seeded from the sidebar's non-hidden servers.
+- `just sidebar-pin-timeline` puts it in the HA sidebar as `dc-timeline`
+  (same iframe-strategy dashboard mechanism and the same ingress-cookie caveat
+  as the per-server entries).
+
 ## Server-by-server sidebar (v0.2.0)
 
 The rooms view now builds its sidebar the way the backfill discovers Discord:

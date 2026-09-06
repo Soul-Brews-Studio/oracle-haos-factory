@@ -127,7 +127,10 @@
     const focus=useMemo(()=>focusOnly?window.DCSimpleTree.findGuild(guilds,focusQuery):null,[guilds]);
     useEffect(()=>{(async()=>{try{const fresh=await signIn();tokenRef.current=fresh;setToken(fresh);const payload=await api('api/dc/sidebar');setData(payload);
       const built=window.DCSimpleTree.buildSidebar(payload);const start=window.DCSimpleTree.findGuild(built,focusQuery)||built.find(g=>!g.hidden&&g.open)||built.find(g=>!g.hidden)||built[0];
-      const first=start&&window.DCSimpleTree.firstRoom(start);if(first)setActive({id:first.id,name:first.name,kind:first.kind,guild:start.name,guild_id:start.id});
+      // ?room=<channel or thread id> (the timeline links here) wins over the default room.
+      const wanted=params.get('room')||'';const room=wanted?payload.channels.find(row=>row.id===wanted&&row.kind!=='guild'):null;const roomGuild=room?built.find(g=>g.id===room.guild_id):null;
+      if(room&&roomGuild)setActive({id:room.id,name:room.name,kind:room.kind,guild:roomGuild.name,guild_id:roomGuild.id});
+      else{const first=start&&window.DCSimpleTree.firstRoom(start);if(first)setActive({id:first.id,name:first.name,kind:first.kind,guild:start.name,guild_id:start.id});}
       const visible=built.filter(g=>!g.hidden).length;setState(`${visible} of ${built.length} servers · ${payload.channels.length} rooms`+(payload.model_error?' · model invalid':''));}
       catch(error){setState(error.body?.haUser?`Home Assistant user ${error.body.haUser.id||''} is not allowed: ${error.message}`:error.message);}})();},[]);
     useEffect(()=>{if(!token||!active)return;let dead=false;(async()=>{try{setState(`Loading #${active.name}…`);const filter=active.kind==='thread'?`thread_id=${JSON.stringify(active.id)}`:`channel_id=${JSON.stringify(active.id)} && (thread_id='' || thread_id=null)`;const result=await api('api/collections/discord_messages/records?'+new URLSearchParams({page:'1',perPage:'100',sort:'-ts,-message_id',filter}));if(!dead){setMessages(result.items||[]);setState(`${result.totalItems||0} messages in #${active.name}`);}}catch(error){if(!dead)setState(error.message);}})();return()=>{dead=true};},[token,active]);
@@ -151,6 +154,7 @@
         c('header',{className:'flex min-h-16 shrink-0 items-center gap-3 border-b border-slate-800 px-4'},
           c('button',{type:'button',onClick:()=>setDrawer(true),className:'rounded-md p-2 text-slate-300 hover:bg-slate-800 md:hidden','aria-label':'Open server list'},'☰'),
           c('div',{className:'min-w-0 flex-1'},c('h1',{className:'truncate text-base font-bold text-white'},active?`${active.kind==='thread'?'↳':'#'} ${active.name}`:'Choose a room'),c('p',{className:'truncate text-xs text-slate-400'},active?`${active.guild} · ${active.id}`:'Server → category → channel → thread')),
+          c('a',{href:'./timeline.html',className:'hidden rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 sm:block'},'Timeline'),
           c('button',{type:'button',onClick:()=>setServers(true),className:'hidden rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 sm:block'},'Servers'),
           c('a',{href:'./panel.html',className:'hidden rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 sm:block'},'Dashboard'),
           c('a',{href:'./_/',className:'rounded-md bg-accent px-3 py-2 text-sm font-semibold text-white hover:brightness-110'},'Admin')),

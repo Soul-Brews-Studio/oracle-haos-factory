@@ -44,6 +44,7 @@ verify:
     node tests/test_simple_tree.js
     node tests/test_sidebar.js
     node tests/test_ha_admins.js
+    node tests/test_events.js
     bun test sdk/dc.test.ts
     tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done
@@ -57,6 +58,7 @@ test:
     node tests/test_simple_tree.js
     node tests/test_sidebar.js
     node tests/test_ha_admins.js
+    node tests/test_events.js
     node tests/test_dc_api.js
     node tests/test_timeline.js
     {{py}} -m unittest tests.test_ha_admins tests.test_service tests.test_backfill tests.test_selection tests.test_model -q 2>&1 | tail -3
@@ -149,6 +151,10 @@ sidebar-sync: _ha
 # Pin one server: just sidebar-pin 1410301189123342488 ["Soul Brews"]
 sidebar-pin GUILD *TITLE: _ha
     @{{sidebar}} pin "$1" "${@:2}"
+
+# The central timeline (every server, one clock) as its own HA sidebar entry: dc-timeline
+sidebar-pin-timeline *TITLE: _ha
+    @{{sidebar}} pin-timeline "$@"
 
 sidebar-hide URL_PATH: _ha
     @{{sidebar}} hide "$1"

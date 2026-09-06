@@ -164,6 +164,19 @@ async function main() {
       for (const d of have) if (!all.some((g) => `${PREFIX}${g.id}` === d.url_path)) console.log(`  ! stale   ${d.url_path} is pinned but no longer in the archive — unpin it if you want`);
       break;
     }
+    case "pin-timeline": {
+      // The central timeline as its own HA sidebar entry: dc-timeline -> timeline.html
+      const url_path = `${PREFIX}timeline`, title = rest.join(" ") || "Discord Timeline";
+      const existing = (await dashboards()).find((d) => d.url_path === url_path);
+      if (!existing) await ha.send({ type: "lovelace/dashboards/create", url_path, title, icon: "mdi:timeline-clock", show_in_sidebar: true, require_admin: false, mode: "storage" });
+      else if (existing.title !== title || !existing.show_in_sidebar) await ha.send({ type: "lovelace/dashboards/update", dashboard_id: existing.id, title, show_in_sidebar: true });
+      const url = `${entry}/timeline.html`;
+      await ha.send({ type: "lovelace/config/save", url_path, config: { strategy: { type: "iframe", url } } });
+      const config = await ha.send<{ strategy?: { url?: string } }>({ type: "lovelace/config", url_path, force: true });
+      if (config?.strategy?.url !== url) die(`${url_path}: iframe config did not persist`);
+      console.log(`  ✓ ${existing ? "updated" : "pinned"}  ${url_path.padEnd(26)} ${title}`);
+      break;
+    }
     case "hide": case "show": {
       const [url_path] = rest; if (!url_path) die(`${command} needs URL_PATH`);
       await setVisible(url_path, command === "show");
@@ -177,7 +190,7 @@ async function main() {
       console.log(`  ✓ unpinned ${url_path}`);
       break;
     }
-    default: die(`unknown command ${command}; use list | servers | pin | sync | hide | show | unpin`);
+    default: die(`unknown command ${command}; use list | servers | pin | pin-timeline | sync | hide | show | unpin`);
   }
   ha.close();
 }
