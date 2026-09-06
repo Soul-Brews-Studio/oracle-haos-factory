@@ -600,3 +600,21 @@ Live evidence for 0.2.1: [`evidence/sidebar-v0.2.1-kvmlab1.txt`](evidence/sideba
 non-admin HA user refused with `HA user is not an administrator` (and 401 on
 the name lookup), 12 servers synced into the HA sidebar, hide/show round-trip
 app → `just sidebar-sync` → `show_in_sidebar`, and the expired-token re-sign.
+
+## Central timeline — v0.3.0 (2026-09-07, deployed to kvmlab1)
+
+Nat: "add more view … 1 single timeline show time show what happened show
+from where, like central monitoring". Shipped `timeline.html` +
+`GET /api/dc/timeline` (`pb_hooks/250_timeline.pb.js`, `lib/dc_events.js`,
+`pb_public/timeline-model.js`, `timeline.js`), `?room=` in the rooms view,
+`just sidebar-pin-timeline` (HA entry `dc-timeline`). Every row = when
+(Bangkok clock + relative) / what (message with edited·deleted·files badges,
+thread created/archived, import completed) / where (Server › Category ›
+#channel ↳ thread, linking into the room). Live rows arrive over PocketBase
+realtime and are resolved to the same names. System strip: gateway live state,
+last backfill run.
+
+Live evidence: [`evidence/timeline-v0.3.0-kvmlab1.txt`](evidence/timeline-v0.3.0-kvmlab1.txt)
+— 118 events through real ingress, category cross-check 0 mismatches against
+the sidebar, 200-row message paging with `before`, the page and its HA sidebar
+entry rendering with the live strip connected.

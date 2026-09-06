@@ -1,0 +1,32 @@
+discord_pb 0.3.0 — central timeline on kvmlab1 (HA 2026.8.3, HAOS 18.2), 2026-09-07 06:3x +07
+Deployed with `just deploy` (update path 0.2.1 → 0.3.0; running version read back: 0.3.0 started).
+
+Local (m5) before deploy: node tests (events 30+ assertions, sidebar, tree, ha_admins, dc_api, timeline
+helper), 89 python tests (PyYAML venv), node --check, py_compile, bash -n. Local PocketBase 0.29.3 with the
+hooks: GET /api/dc/timeline 200 with names/category/thread resolved, edited/deleted/attachment badges,
+q=50%25 LIKE-escaped, limit=2 paging with before=next_before, guild-filter miss → empty, limit=999 → 400,
+kinds=nope → 400, no token → 401. ego-browser against local PB: 6 rows in day groups, kind toggle,
+search, window, room link ./simple.html?guild=…&room=….
+
+Live API through HA ingress (bun probe, owner auto-login):
+  limit=8&since=2026-08-01 → HTTP 200, 118 events (4 imports at 06:31 +07 right after the update's first
+  backfill, 106 thread creations across Mini lab / Phd Oracle / nat's ARRA Oracles / nat's August 2026 /
+  Oracle School / Arthur Visions, 1 message), next_before=2026-08-18T03:49:06.146Z,
+  system.live_status.connected=true, system.backfill.state=running
+  kinds=message&limit=200 → 200 rows, has_more=true, newest 2026-08-18, oldest 2026-06-17;
+  199 × "Arthur Visions › Text Channels › #cctv", 1 × "Soul Brews - Brewing for Life › - › #mawjs-oracle"
+  category cross-check vs /api/dc/sidebar: 254/559 channels carry a category; events whose channel has
+  a category in the sidebar but none in the timeline: 0
+
+HA sidebar entry: `just sidebar-pin-timeline` → ✓ pinned dc-timeline "Discord Timeline"
+  iframe strategy → …/hassio_ingress/<token>/timeline.html
+
+Browser (ego-browser, HA owner session, DOM assertions; screenshots still time out in this browser):
+  /local_discord_pb → panel iframe "406 messages in 4 channels" (creates the ingress cookie)
+  …/timeline.html (24h) → "4 events · 12 of 12 servers · 24h", day "Mon 7 Sep 2026",
+    first row: import 06:31:28 "Arthur Visions › #green-finance | backfill | import completed for green-finance"
+    strip: "gateway connected since Mon 7 Sep 2026, 06:34:48 +07 · backfill running started 1 min ago · live updates connected"
+    16 chips (3 kinds + all servers + 12 servers)
+  window 30d → "111 events · 12 of 12 servers · 30d", kinds {import:4, thread:106, message:1}
+  toggle "Arthur Visions" off → "109 events · 11 of 12 servers · 30d"
+  /dc-timeline → "Discord Timeline – Home Assistant", iframe: rows=4, "4 events · 12 of 12 servers · 24h"
