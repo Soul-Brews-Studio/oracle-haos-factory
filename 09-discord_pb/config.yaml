@@ -1,5 +1,5 @@
 name: "Discord PocketBase"
-version: "0.1.0"
+version: "0.1.1"
 slug: "discord_pb"
 description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/01-discord-pb-kvmlab1/09-discord_pb"
@@ -16,23 +16,22 @@ panel_icon: mdi:message-text-clock
 panel_title: "Discord Archive"
 panel_admin: true
 ports:
-  8110/tcp: 8110
+  8110/tcp: null
 ports_description:
   8110/tcp: "PocketBase API and admin UI"
 map:
   - data:rw
 stage: experimental
 options:
-  bot_token: null
   channels: ""
   poll_minutes: 60
   auto_login: false
-  admin_email: null
-  admin_password: null
+  auto_login_ha_user_ids: ""
 schema:
   bot_token: password?
   channels: str
-  poll_minutes: int
+  poll_minutes: int(1,10080)
   auto_login: bool
+  auto_login_ha_user_ids: str
   admin_email: str?
   admin_password: password?

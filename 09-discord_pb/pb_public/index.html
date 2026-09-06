@@ -1,8 +1,24 @@
-<!doctype html><meta charset="utf-8"><title>Discord Archive</title>
-<style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}button{padding:.7rem 1rem}</style>
-<h1>Discord Archive</h1><p id="status">Loading…</p>
-<p><a href="/_/">Open PocketBase admin</a> <button id="login">Open admin with auto-login</button></p>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Discord Archive</title>
+<style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}a{display:inline-block;padding:.7rem 1rem;background:#285ae6;color:white;border-radius:.4rem}pre{white-space:pre-wrap}</style>
+</head><body>
+<h1>Discord Archive</h1><p id="archive-status">Loading archive counts…</p>
+<p><a href="./_/">Open PocketBase admin</a></p><p id="login-status" role="status"></p>
 <script>
-fetch('./api/discord/status').then(r=>r.json()).then(x=>status.textContent=`${x.total} messages in ${x.channels.length} channels`).catch(e=>status.textContent=e)
-login.onclick=async()=>{const r=await fetch('./api/discord/admin-token');const x=await r.json();if(!r.ok)return alert(x.error);localStorage.setItem(x.key,JSON.stringify({token:x.token,record:x.record}));location.href='./_/'}
-</script>
+(async () => {
+  const status = document.getElementById('archive-status');
+  const loginStatus = document.getElementById('login-status');
+  try {
+    const response = await fetch('./api/discord/status', {cache:'no-store'});
+    if (!response.ok) throw new Error('Archive status unavailable');
+    const data = await response.json();
+    status.textContent = `${data.total} messages in ${data.channels.length} channels`;
+    const auth = await fetch('./api/discord/admin-token', {method:'POST', cache:'no-store'});
+    const session = await auth.json();
+    if (!auth.ok) { loginStatus.textContent = session.error; return; }
+    localStorage.setItem(session.key, JSON.stringify({token:session.token, record:session.record}));
+    location.replace('./_/');
+  } catch (error) { loginStatus.textContent = error.message; }
+})();
+</script></body></html>

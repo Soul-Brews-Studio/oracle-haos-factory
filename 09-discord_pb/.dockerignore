@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!namespace_admin.py
+!service.py
+!backfill.py
+!run.sh
+!pb_hooks/
+!pb_hooks/**
+!pb_migrations/
+!pb_migrations/**
+!pb_public/
+!pb_public/**
