@@ -1,7 +1,20 @@
 import { test, expect } from "bun:test";
 import { optionsEnvironment } from "../options";
 const options = () => ({ auth_key: crypto.randomUUID() });
-test("empty auth fails closed", () => { expect(() => optionsEnvironment({})).toThrow("auth_key"); });
+test("optional schema auth still fails closed when missing, null, empty or whitespace", () => {
+  expect(() => optionsEnvironment({})).toThrow("auth_key");
+  for (const auth_key of [null, "", "   "]) {
+    expect(() => optionsEnvironment({auth_key})).toThrow("auth_key");
+  }
+});
+test("empty or null optional TURN fields disable TURN", () => {
+  for (const value of ["", null]) {
+    const env = optionsEnvironment({...options(), turn_url: value, turn_user: value, turn_pass: value});
+    expect(env.TURN_URLS).toBe("");
+    expect(env.TURN_USER).toBe("");
+    expect(env.TURN_CRED).toBe("");
+  }
+});
 test("defaults use share and local signaling", () => {
   const env = optionsEnvironment(options());
   expect(env.SAVE_DIR).toBe("/share/p2p");

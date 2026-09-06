@@ -33,11 +33,11 @@ options:
   turn_user: ""
   turn_pass: ""
 schema:
-  auth_key: password
+  auth_key: password?
   save_dir: str
   stun_servers:
     - str
   max_file_mb: int(1,10240)
-  turn_url: str
-  turn_user: str
-  turn_pass: password
+  turn_url: str?
+  turn_user: str?
+  turn_pass: password?
