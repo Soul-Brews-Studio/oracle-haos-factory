@@ -1,5 +1,39 @@
 # Local proof — P2P Dropbox
 
+## Follow-up: Supervisor-compatible image tags (2026-09-06)
+
+After the lead reported Supervisor falling back to `base:latest`, build.yaml and
+Dockerfile references were changed to plain version tags. Previous digests remain
+as provenance comments, not enforced pins. Docker Hub is still needed for the Bun
+stage unless cached. No on-box changes were made by this follow-up.
+
+Fresh local builds and host-mode `verify.sh` runs passed for both architectures:
+[arm64 build](evidence/plain-tags/build-arm64.log),
+[amd64 build](evidence/plain-tags/build-amd64.log),
+[arm64 exact verification](evidence/plain-tags/verify-arm64.txt),
+[amd64 exact verification](evidence/plain-tags/verify-amd64.txt).
+Plain tags resolved to the previous digests and layers were cached; these were not
+cache-free builds. amd64 ran under emulation on the same Colima arm64 host.
+Both P2P and HTTP source/destination hashes match, empty auth fails startup,
+unauthenticated HTTP/WS are rejected, size limits hold and both s6 services run.
+[Regression tests](evidence/plain-tags/tests.log): 31 pass, 0 fail, 117 assertions.
+TypeScript, build.yaml tag checks and `git diff --check` passed.
+
+Commands (from the add-on directory, for each `arch=arm64/amd64`, with
+`ha_arch=aarch64/amd64` respectively):
+
+```sh
+docker build --platform "linux/$arch" --build-arg BUILD_ARCH="$ha_arch" \
+  --build-arg BUILD_FROM="ghcr.io/home-assistant/$ha_arch-base:3.22" \
+  -t "p2p-dropbox:$arch" --progress=plain .
+IMAGE="p2p-dropbox:$arch" PROOF_DIR="$PWD/proof/plain-tags-$arch" ./verify.sh
+```
+
+This does not prove Supervisor build-config acceptance; the lead is testing the
+on-box copy separately. The original proof and its browser/HA/TURN gaps follow.
+
+## Original local proof
+
 **DONE for the requested local build/test phase. STOP before Supervisor install.**
 
 - Branch: `lab/02-p2p-dropbox-kvmlab1` in `Soul-Brews-Studio/oracle-haos-factory`.

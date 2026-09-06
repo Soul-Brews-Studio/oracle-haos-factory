@@ -1,5 +1,8 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.22@sha256:536c6164d3ef70a275573334e3c52b77e4cb90a90776e0ca609089deb5357b25
-FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS bun
+# HA base digest provenance is recorded in build.yaml.
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.22
+# Previously verified Bun manifest: sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
+# Docker Hub access is still required unless this version-tagged image is cached.
+FROM oven/bun:1.3.14-alpine AS bun
 FROM ${BUILD_FROM}
 ARG BUILD_ARCH=amd64
 ARG BUILD_VERSION=0.1.0

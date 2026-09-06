@@ -37,7 +37,10 @@ and inspected, but its PeerJS protocol would require unnecessary client migratio
   issuer; watch-scope tokens fail WS auth and watch pages return 404.
 
 Runtime Hono 4.12.27 and werift 0.23.0 resolve from the upstream Bun lock.
-Bun 1.3.14 and HA Alpine 3.22 base images are tag+digest pinned in Docker/build files.
+Bun 1.3.14 and HA Alpine 3.22 base images use plain version tags for Supervisor
+compatibility. Previously verified digests remain as provenance comments in
+Docker/build files; tags are not immutable. Docker Hub is still required for the
+Bun stage unless cached, and its binary version is checked during the build.
 
 ## Evidence references read
 

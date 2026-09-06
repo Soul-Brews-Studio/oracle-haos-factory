@@ -118,7 +118,7 @@ curl, shasum, and Bash. No Supervisor, SSH, deployment secrets or registry push.
 # From 10-p2p_dropbox/
 docker build --platform linux/amd64 --build-arg BUILD_ARCH=amd64 -t p2p-dropbox:amd64 .
 docker build --platform linux/arm64 --build-arg BUILD_ARCH=aarch64 \
-  --build-arg BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a \
+  --build-arg BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.22 \
   -t p2p-dropbox:arm64 .
 (cd dropbox && bun install --frozen-lockfile)
 bun test
@@ -127,6 +127,11 @@ IMAGE=p2p-dropbox:amd64 ./verify.sh
 # Optional isolated Docker-bridge peer test:
 PEER_MODE=bridge IMAGE=p2p-dropbox:arm64 ./verify.sh
 ```
+
+Build references use plain version tags for Supervisor compatibility; previous
+digests remain in comments for provenance, not enforcement. Building requires
+GHCR and Docker Hub access unless the required images are cached. The Bun binary
+version is checked against 1.3.14 during the build.
 
 `verify.sh` generates a disposable random fixture key, starts an add-on container,
 asserts empty-key startup rejection and unauthenticated HTTP/WS rejection, runs
