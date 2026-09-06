@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const KEY = "__dc_superuser_auth__";
-let session = null, page = 1, pages = 1, importBatch = null, authenticated = false;
+let session = null, page = 1, pages = 1, importBatch = null, authenticated = false, configModel = null;
 
 function notify(id, message, error = false) {
   $(id).textContent = message;
@@ -23,9 +23,20 @@ async function api(path, options = {}) {
   const headers = {...options.headers, Authorization: session.token};
   return request(path, {...options, headers});
 }
+async function apiText(path) {
+  const response = await fetch("./" + path, {cache: "no-store", headers: {Authorization: session.token}});
+  const text = await response.text();
+  if (!response.ok) {
+    let data; try { data = JSON.parse(text); } catch (_) {}
+    throw new Error(data?.error || data?.message || ("Request failed: " + response.status));
+  }
+  return text;
+}
 function enableSession(value) {
   authenticated = value;
   for (const id of ["filter-button", "find-button", "import-file"]) $(id).disabled = !value;
+  for (const id of ["channels-refresh", "config-validate", "config-save", "config-reload", "config-download"]) $(id).disabled = !value;
+  for (const input of document.querySelectorAll("#channel-list input, #channel-list button")) input.disabled = !value || input.dataset.locked === "true";
 }
 async function authenticate() {
   enableSession(false);
@@ -78,6 +89,92 @@ async function totals() {
   const data = await request("api/discord/status");
   notify("archive-status", data.total.toLocaleString() + " messages in " + data.channels.length + " channels");
 }
+function channelRows(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.channels)) return data.channels;
+  throw new Error("Server returned an invalid channel list.");
+}
+async function setChannelSelected(row, input) {
+  input.disabled = true;
+  const wanted = input.checked;
+  try {
+    await api("api/dc/channels/" + encodeURIComponent(row.id) + "/select", {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({on: wanted})
+    });
+    row.selected = wanted;
+    notify("channels-status", (wanted ? "Selected " : "Stopped polling ") + (row.name || row.id) + ".");
+  } catch (error) {
+    input.checked = !wanted;
+    notify("channels-status", error.message, true);
+  } finally { input.disabled = !authenticated; }
+}
+function fieldInput(label, value, className = "channel-policy") {
+  const input = document.createElement("input"); input.type = "text"; input.value = value || "";
+  input.className = className; input.setAttribute("aria-label", label); input.placeholder = label;
+  return input;
+}
+function addChannelRow(container, row, policy) {
+  const div = document.createElement("div"); div.className = "channel-choice" + (row.kind === "thread" ? " thread" : "");
+  const selected = document.createElement("input"); selected.type = "checkbox"; selected.className = "import-toggle";
+  selected.checked = !!row.selected && row.importable !== false;
+  selected.setAttribute("aria-label", "Import " + (row.name || row.id)); selected.title = row.importable === false ? "This Discord channel type cannot be imported" : "Import and poll";
+  if (row.importable === false) { selected.disabled = true; selected.dataset.locked = "true"; }
+  const identity = document.createElement("span");
+  const name = document.createElement("span"); name.className = "channel-name";
+  name.textContent = (row.kind === "thread" ? "↳ " : "") + (row.name || "Unnamed");
+  const metadata = document.createElement("span"); metadata.className = "channel-detail";
+  metadata.textContent = row.id + " · " + Number(row.imported_count || 0).toLocaleString() + " imported" + (row.archived ? " · archived" : "");
+  identity.append(name, metadata);
+  const purpose = fieldInput("Purpose", policy.purpose);
+  const owner = fieldInput("Owner", policy.owner);
+  const postLabel = document.createElement("label"); postLabel.className = "field-label channel-policy"; postLabel.textContent = "Post ";
+  const post = document.createElement("input"); post.type = "checkbox"; post.checked = policy.post === true; postLabel.append(post);
+  const actions = fieldInput("Actions: thread, pin, archive", Array.isArray(policy.actions) ? policy.actions.join(", ") : "");
+  const save = document.createElement("button"); save.type = "button"; save.className = "row-save"; save.textContent = "Save";
+  if (row.importable !== false) selected.onchange = () => setChannelSelected(row, selected);
+  save.onclick = async () => {
+    save.disabled = true;
+    try {
+      const body = {purpose: purpose.value.trim(), owner: owner.value.trim(), import: selected.checked, post: post.checked,
+        actions: actions.value.split(",").map(value => value.trim()).filter(Boolean)};
+      await api("api/dc/config/channel/" + encodeURIComponent(row.id), {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+      notify("channels-status", "Saved " + (row.name || row.id) + ".");
+      await loadChannels();
+    } catch (error) { notify("channels-status", error.message, true); }
+    finally { save.disabled = !authenticated; }
+  };
+  div.append(selected, identity, purpose, owner, postLabel, actions, save);
+  container.append(div);
+}
+async function loadChannels() {
+  notify("channels-status", "Loading declared model…");
+  // Keep externally broken YAML editable even when resolved policy fails closed.
+  const rawYaml = await apiText("api/dc/config.yaml");
+  $("config-yaml").value = rawYaml;
+  const [channelData, model] = await Promise.all([api("api/dc/channels"), api("api/dc/config")]);
+  const rows = channelRows(channelData); configModel = model;
+  const policies = model?.channels && typeof model.channels === "object" ? model.channels : {};
+  $("channel-list").replaceChildren();
+  const guilds = new Map();
+  for (const row of rows) {
+    const guild = row.guild || "Unknown guild";
+    if (!guilds.has(guild)) guilds.set(guild, []);
+    guilds.get(guild).push(row);
+  }
+  for (const [guild, guildRows] of [...guilds.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const group = document.createElement("section"); group.className = "guild-group";
+    const title = document.createElement("h3"); title.className = "guild-title"; title.textContent = guild; group.append(title);
+    const threads = guildRows.filter(row => row.kind === "thread");
+    const channels = guildRows.filter(row => row.kind !== "thread");
+    for (const row of channels) {
+      addChannelRow(group, row, policies[row.id] || {});
+      for (const thread of threads.filter(item => item.parent === row.id)) addChannelRow(group, thread, policies[thread.id] || {});
+    }
+    for (const thread of threads.filter(item => !channels.some(row => row.id === item.parent))) addChannelRow(group, thread, policies[thread.id] || {});
+    $("channel-list").append(group);
+  }
+  notify("channels-status", rows.length ? rows.length.toLocaleString() + " discovered channels and threads · config " + (model?.exists ? "loaded" : "not created yet") + "." : "No channels discovered yet. Add a guild in the add-on options, then run backfill.");
+}
 async function loadMessages() {
   notify("message-status", "Loading messages…");
   const channel = $("channel-filter").value.trim();
@@ -126,12 +223,53 @@ async function refresh() {
   try {
     await totals();
     await authenticate();
-    await Promise.all([loadMessages(), loadJob()]);
+    await Promise.all([loadMessages(), loadJob(), loadChannels()]);
   } catch (error) {
     notify("login-status", error.message + " You can also sign in using Open PocketBase admin, then return and Refresh.", true);
   } finally { $("refresh").disabled = false; }
 }
 $("refresh").onclick = refresh;
+function showTab(name) {
+  const model = name === "model";
+  $("archive-view").hidden = model; $("model-view").hidden = !model;
+  $("archive-tab").classList.toggle("active", !model); $("model-tab").classList.toggle("active", model);
+  $("archive-tab").setAttribute("aria-selected", String(!model)); $("model-tab").setAttribute("aria-selected", String(model));
+}
+$("archive-tab").onclick = () => showTab("archive");
+$("model-tab").onclick = () => showTab("model");
+$("channels-refresh").onclick = async () => {
+  $("channels-refresh").disabled = true;
+  try { await loadChannels(); } catch (error) { notify("channels-status", error.message, true); }
+  finally { $("channels-refresh").disabled = !authenticated; }
+};
+async function configRequest(path, body, success) {
+  try {
+    const result = await api("api/dc/config/" + path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    notify("config-status", success);
+    return result;
+  } catch (error) { notify("config-status", error.message, true); throw error; }
+}
+$("config-validate").onclick = async () => {
+  $("config-validate").disabled = true;
+  try { await configRequest("validate", {yaml: $("config-yaml").value}, "Configuration is valid. Nothing was saved."); }
+  catch (_) {} finally { $("config-validate").disabled = !authenticated; }
+};
+$("config-save").onclick = async () => {
+  $("config-save").disabled = true;
+  try { await configRequest("save", {yaml: $("config-yaml").value}, "Configuration saved and applied."); await loadChannels(); }
+  catch (_) {} finally { $("config-save").disabled = !authenticated; }
+};
+$("config-reload").onclick = async () => {
+  $("config-reload").disabled = true;
+  try { await configRequest("reload", {}, "Configuration reloaded from disk."); await loadChannels(); }
+  catch (_) {} finally { $("config-reload").disabled = !authenticated; }
+};
+$("config-download").onclick = () => {
+  const yaml = $("config-yaml").value;
+  const url = URL.createObjectURL(new Blob([yaml], {type: "text/yaml;charset=utf-8"}));
+  const link = document.createElement("a"); link.href = url; link.download = "dc.config.yaml"; link.click(); URL.revokeObjectURL(url);
+  notify("config-status", "Downloaded dc.config.yaml.");
+};
 $("message-filter").onsubmit = async event => {
   event.preventDefault(); page = 1;
   try { await loadMessages(); } catch (error) { notify("message-status", error.message, true); }

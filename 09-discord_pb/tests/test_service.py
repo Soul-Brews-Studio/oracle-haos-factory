@@ -12,7 +12,7 @@ spec.loader.exec_module(service)
 class ServiceTests(unittest.TestCase):
     def test_invalid_options_fail_closed(self):
         for data in ([], {"poll_minutes": 0}, {"poll_minutes": True}, {"auto_login": "true"},
-                     {"auto_login_ha_admins": "true"},
+                     {"auto_login_ha_admins": "true"}, {"allow_post": "true"}, {"post_channels": []},
                      {"admin_email": "user@example.test"}, {"channels": []}):
             with self.subTest(data=data), tempfile.TemporaryDirectory() as folder:
                 path = Path(folder) / "options.json"

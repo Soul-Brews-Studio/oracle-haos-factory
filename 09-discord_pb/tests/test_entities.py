@@ -291,6 +291,15 @@ class GuildDiscoveryTests(unittest.TestCase):
 
 
 class MainResolutionOrderTests(unittest.TestCase):
+    def setUp(self):
+        self.selection = patch.object(backfill, "pb_post", side_effect=lambda _path, payload: {
+            "initialized": "initial" in payload, "selected": payload.get("initial", []), "requests": []})
+        self.selection.start()
+        self.addCleanup(self.selection.stop)
+        seed = patch.object(backfill, "seed_selection", side_effect=lambda ids, token: {
+            "initialized": True, "selected": ids, "requests": []})
+        seed.start(); self.addCleanup(seed.stop)
+
     def test_named_guild_bootstrap_paginates_all_available_guilds(self):
         first_page = [
             {"id": str(40000000000000000 + index), "name": f"Guild {index}"}

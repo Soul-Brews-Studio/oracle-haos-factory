@@ -24,7 +24,9 @@ def options(path):
         raise ValueError("auto_login must be boolean")
     if type(data.get("auto_login_ha_admins", False)) is not bool:
         raise ValueError("auto_login_ha_admins must be boolean")
-    for key in ("bot_token", "channels", "guilds", "admin_email", "admin_password", "auto_login_ha_user_ids"):
+    if type(data.get("allow_post", False)) is not bool:
+        raise ValueError("allow_post must be boolean")
+    for key in ("bot_token", "channels", "guilds", "post_channels", "admin_email", "admin_password", "auto_login_ha_user_ids"):
         if data.get(key) is not None and not isinstance(data[key], str):
             raise ValueError(f"{key} must be a string")
     if bool(data.get("admin_email")) != bool(data.get("admin_password")):
@@ -48,7 +50,7 @@ def main():
     # Keep Discord credentials out of PB's environment and process arguments.
     env.pop("DISCORD_BOT_TOKEN", None)
     env.update(DISCORD_PB_INTERNAL_TOKEN=secrets.token_urlsafe(32),
-               DISCORD_PB_BACKFILL_READY=str(bool((config.get("bot_token") or env.get("DISCORD_PB_FIXTURE") == "true") and (config.get("channels") or config.get("guilds")))).lower(),
+               DISCORD_PB_BACKFILL_READY=str(bool(config.get("bot_token") or env.get("DISCORD_PB_FIXTURE") == "true")).lower(),
                DISCORD_PB_ADMIN_EMAIL=config.get("admin_email") or "admin@discord-pb.local",
                DISCORD_PB_ADMIN_PASSWORD=config.get("admin_password") or secrets.token_urlsafe(40),
                DISCORD_PB_SET_PASSWORD=str(bool(config.get("admin_password"))).lower(),
@@ -61,6 +63,7 @@ def main():
         "--hooksWatch=false"], env=env)
     job_path = Path("/data/backfill-job.json")
     request_path = Path("/data/backfill-request")
+    channel_request_path = Path("/data/dc-import-request")
     write_job(job_path, "idle")
     stopped = False
     worker = None
@@ -97,21 +100,25 @@ def main():
         while not stopped:
             if pb.poll() is not None:
                 raise RuntimeError("PocketBase exited unexpectedly")
-            if (time.monotonic() >= due or request_path.exists()) and worker is None:
+            if (time.monotonic() >= due or request_path.exists() or channel_request_path.exists()) and worker is None:
+                requested_only = time.monotonic() < due and not request_path.exists()
                 request_path.unlink(missing_ok=True)
+                channel_request_path.unlink(missing_ok=True)
                 if env["DISCORD_PB_BACKFILL_READY"] != "true":
                     write_job(job_path, "idle")
                     due = time.monotonic() + config.get("poll_minutes", 60) * 60
                 else:
                     started_at = datetime.now(timezone.utc).isoformat()
                     write_job(job_path, "running", started_at)
-                    worker = subprocess.Popen([sys.executable, "/app/backfill.py"], env=backfill_env)
+                    worker_env = dict(backfill_env, DISCORD_PB_REQUESTED_ONLY=str(requested_only).lower())
+                    worker = subprocess.Popen([sys.executable, "/app/backfill.py"], env=worker_env)
             if worker is not None and worker.poll() is not None:
                 if worker.returncode:
                     print("backfill failed; next scheduled attempt will replay safely", flush=True)
                 write_job(job_path, "succeeded" if worker.returncode == 0 else "failed", started_at)
                 worker = None
-                due = time.monotonic() + config.get("poll_minutes", 60) * 60
+                if not requested_only:
+                    due = time.monotonic() + config.get("poll_minutes", 60) * 60
             time.sleep(.2)
     finally:
         stop()

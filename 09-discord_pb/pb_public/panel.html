@@ -19,7 +19,11 @@
     <button id="copy-user-id" type="button">Copy user ID</button>
     <p>Paste the ID into <code>auto_login_ha_user_ids</code>, enable <code>auto_login</code>, then restart this add-on. If no ID arrived, reopen the panel from Home Assistant.</p>
   </section>
-  <div class="workspace">
+  <div class="tabs" role="tablist" aria-label="Discord archive views">
+    <button id="archive-tab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="archive-view">Archive</button>
+    <button id="model-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="model-view">Channel model</button>
+  </div>
+  <div id="archive-view" class="workspace" role="tabpanel" aria-labelledby="archive-tab">
     <section aria-labelledby="messages-title" class="messages">
       <div class="section-heading"><h2 id="messages-title">Recent messages</h2><span id="page-label"></span></div>
       <form id="message-filter">
@@ -65,6 +69,17 @@
       </section>
     </aside>
   </div>
+  <section id="model-view" class="model-view" role="tabpanel" aria-labelledby="model-tab" hidden>
+    <div class="section-heading"><div><h2 id="channels-title">Declared channel model</h2><p class="hint">Guild → channel → thread. Import changes immediately; posting and actions require an explicit row save.</p></div><button id="channels-refresh" class="secondary" type="button" disabled>Reload model</button></div>
+    <p id="channels-status" role="status" aria-live="polite">Sign in to view the model.</p>
+    <div id="channel-list" class="channel-list"></div>
+    <details class="yaml-editor"><summary>Raw dc.config.yaml</summary>
+      <p class="hint">Validate before saving. Invalid YAML stays in the editor so you can fix it.</p>
+      <textarea id="config-yaml" rows="16" spellcheck="false" aria-label="dc.config.yaml"></textarea>
+      <div class="config-actions"><button id="config-validate" type="button" disabled>Validate</button><button id="config-save" type="button" disabled>Save YAML</button><button id="config-reload" class="secondary" type="button" disabled>Reload file</button><button id="config-download" class="secondary" type="button" disabled>Download</button></div>
+      <p id="config-status" role="status" aria-live="polite"></p>
+    </details>
+  </section>
 </main>
 <footer>Stored in this add-on’s PocketBase. Message content is displayed as text, never executed.</footer>
 </body>

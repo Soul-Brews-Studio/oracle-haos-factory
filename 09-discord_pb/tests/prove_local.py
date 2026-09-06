@@ -252,12 +252,12 @@ def main():
         repeat_guild = command("docker", "exec", app, "python3", "/tests/container_probe.py", "guild",
                                "http://fixture:18080", "Proof Guild", "proof-general")
         repeated = json.loads(repeat_guild.splitlines()[-1])
-        assert repeated["complete"] is True and repeated["inserted"] == 0 and repeated["channels"] == 4
+        assert repeated["complete"] is True and repeated["inserted"] == 0 and repeated["channels"] == 2
         state = json.loads(command("docker", "exec", app, "cat", "/data/backfill-state.json"))
-        assert state["900000000000000005"] == "0"
+        assert "900000000000000005" not in state
         discovered = http(base + "/api/collections/discord_entities/records?" + urlencode({"filter": 'entity_id="900000000000000005"'}), headers=credentials)[1]["items"]
         assert discovered[0]["name"] == "proof-new-thread" and discovered[0]["parent_id"] == PARENT2
-        log("PASS next guild poll re-walks and discovers a new thread; named channel works; inserted=0")
+        log("PASS next guild poll lists new thread without importing it; only 2 selected channels polled; inserted=0")
         lookup_proof = command("docker", "exec", app, "python3", "/tests/container_probe.py", "entity-pages")
         assert lookup_proof == "PASS 502 entities: chunked upsert; later-page exact/ambiguous/Unicode/missing lookup"
         log(lookup_proof)
@@ -323,6 +323,7 @@ def main():
         assert http(ingress + "api/discord/admin-token", "POST",
                     headers={"X-Proof-User": "another-admin"})[0] == 200
         log("PASS auto_login off=403; direct/spoofed/non-allowlisted=403 with HA identity; allowlisted=200; panel-admin opt-in=200; no-store")
+        log(command("docker", "exec", app, "python3", "/tests/dc_probe.py"))
         after_hash = source_hashes(source)
         assert before_hash == after_hash, "Source archive changed during proof (could be external writer); rerun for integrity proof"
         log("PASS source DB/WAL/SHM SHA256 unchanged")

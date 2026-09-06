@@ -128,9 +128,10 @@ def resolve_name(name, kind):
             if type(next_offset) is not int or next_offset <= offset:
                 raise RuntimeError("PocketBase entity pagination did not advance")
             offset = next_offset
-    matches = [row for row in matches if str(row.get("name", "")).casefold() == name.casefold()]
+    matches = [row for row in matches if name.casefold() in str(row.get("name", "")).casefold()]
     exact = [row for row in matches if row.get("name") == name]
-    chosen = exact or matches
+    folded = [row for row in matches if str(row.get("name", "")).casefold() == name.casefold()]
+    chosen = exact or folded or matches
     if len(chosen) == 1: return chosen[0]["entity_id"]
     candidates = ", ".join(f'{row.get("name")} ({row.get("entity_id")})' for row in matches) or "none"
     if not matches: raise ValueError(f'{kind} name {name!r} not found; candidates: {candidates}')
@@ -138,6 +139,16 @@ def resolve_name(name, kind):
 
 def resolve_targets(values, kind):
     return [value if SNOWFLAKE_RE.fullmatch(value) else resolve_name(value, kind) for value in values]
+
+def seed_selection(channels, token):
+    # IDs need metadata too: validate the entire seed before storing any choice.
+    from dc_model import IMPORTABLE_TYPES
+    for channel in channels:
+        metadata = request_json(API + f"/channels/{channel}", discord_headers(token))
+        if metadata.get("id") != channel or metadata.get("type") not in IMPORTABLE_TYPES:
+            raise ValueError(f"initial channel {channel} is not importable; select a text channel or individual thread")
+        post_entities([entity(metadata)])
+    return pb_post("/api/discord/internal/selection", {"initial": channels})
 
 def list_archived(route, headers, joined=False):
     result = []
@@ -244,7 +255,13 @@ def backfill(channel, token, high_water=None):
     if high_water is not None and high_water != "0": high_water = snowflake(high_water, "high-water mark")
     headers = discord_headers(token)
     metadata = request_json(API + f"/channels/{channel}", headers)
+    if metadata.get("type") not in {0, 5, 10, 11, 12}:
+        raise ValueError("channel is not importable; select a text channel or individual thread")
     post_entities([entity(metadata)])
+    if metadata.get("guild_id"):
+        gid = snowflake(metadata["guild_id"], "channel.guild_id")
+        guild = request_json(API + f"/guilds/{gid}", headers)
+        post_entities([entity(dict(guild, guild_id=gid), "guild")])
     context = channel_context(metadata)
     if (context["thread_id"] or context["channel_id"]) != channel: raise ValueError("Discord returned metadata for a different channel")
     mode = "incremental" if high_water is not None else "historical"
@@ -288,9 +305,13 @@ def main():
     guild_values = [x.strip() for x in os.getenv("DISCORD_GUILDS", "").split(",") if x.strip()]
     if fixture_requested() and token:
         raise RuntimeError("DISCORD_PB_FIXTURE forbids DISCORD_BOT_TOKEN")
-    if not (channel_values or guild_values) or (not token and not fixture_mode_enabled()):
-        print("discord_pb: bot_token/channels/guilds absent; PocketBase stays available and backfill is idle", flush=True); return 0
-    if any(not SNOWFLAKE_RE.fullmatch(value) for value in guild_values):
+    if not token and not fixture_mode_enabled():
+        print("discord_pb: bot_token absent; PocketBase stays available and backfill is idle", flush=True); return 0
+    requested_only = os.getenv("DISCORD_PB_REQUESTED_ONLY") == "true"
+    if not requested_only:
+        from dc_model import discovery_guilds
+        guild_values = list(dict.fromkeys(guild_values + discovery_guilds()))
+    if not requested_only and any(not SNOWFLAKE_RE.fullmatch(value) for value in guild_values):
         after = None
         while True:
             query = {"limit": 200}
@@ -301,11 +322,17 @@ def main():
             next_after = max((snowflake(row["id"], "guild.id") for row in available), key=int)
             if after and int(next_after) <= int(after): raise RuntimeError("Discord guild pagination did not advance")
             after = next_after
-    guild_ids = resolve_targets(guild_values, "guild")
-    discovered = []
-    for guild_id in guild_ids: discovered.extend(discover_guild(guild_id, token))
-    # A first poll can now resolve channel names discovered by its guild option.
-    channels = list(dict.fromkeys(resolve_targets(channel_values, "channel") + discovered))
+    if not requested_only:
+        for guild_id in resolve_targets(guild_values, "guild"):
+            # LIST FIRST: discover names, never implicitly select the guild's channels.
+            discover_guild(guild_id, token)
+    selection = pb_post("/api/discord/internal/selection", {})
+    if not requested_only:
+        if not selection["initialized"] and not selection.get("model_present"):
+            initial = resolve_targets(channel_values, "channel")
+            selection = seed_selection(initial, token)
+    requests = {row["entity_id"]: row["request_id"] for row in selection["requests"]}
+    channels = list(dict.fromkeys(([] if requested_only else selection["selected"]) + list(requests)))
     inserted = updated = 0; failures = []
     try:
         with state_lock(STATE_FILE):
@@ -316,6 +343,8 @@ def main():
                     candidate = dict(state); candidate[channel] = result["high_water"]
                     save_state(candidate, STATE_FILE); state = candidate
                     inserted += result["inserted"]; updated += result["updated"]
+                    if channel in requests:
+                        pb_post("/api/discord/internal/import-ack", {"entity_id": channel, "request_id": requests[channel]})
                 except Exception as error:
                     failures.append({"channel_id": channel, "error": str(error)})
                     print(json.dumps({"channel_id": channel, "failed": True, "error": str(error)}, sort_keys=True), file=sys.stderr, flush=True)

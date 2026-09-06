@@ -6,7 +6,7 @@ ARG BUILD_ARCH=amd64
 ENV PB_VERSION=0.29.3
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="addon" io.hass.arch="${BUILD_ARCH}"
 
-RUN apk add --no-cache ca-certificates curl python3 unzip \
+RUN apk add --no-cache ca-certificates curl python3 py3-yaml unzip \
  && case "${BUILD_ARCH}" in \
       amd64) PB_ARCH=amd64; PB_SHA=c0c4ef56b74a17c469b74c00c40d90ec20b6fd33cd45bf1f9993fbf86f03c695 ;; \
       aarch64) PB_ARCH=arm64; PB_SHA=2caee88941e2d571acc2c51e0f0a6c247f07de16a7524019e4808be56cadb9bd ;; \
@@ -23,7 +23,7 @@ RUN python3 /app/namespace_admin.py /pb/pocketbase
 COPY pb_hooks/ /pb/pb_hooks/
 COPY pb_migrations/ /pb/pb_migrations/
 COPY pb_public/ /pb/pb_public/
-COPY backfill.py service.py /app/
+COPY backfill.py service.py dc_model.py /app/
 COPY run.sh /run.sh
 RUN chmod 0755 /run.sh /app/backfill.py
 EXPOSE 8110

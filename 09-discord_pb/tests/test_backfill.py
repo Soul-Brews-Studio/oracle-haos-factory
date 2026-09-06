@@ -57,7 +57,8 @@ class BackfillTests(unittest.TestCase):
         env = {"DISCORD_BOT_TOKEN": "token", "DISCORD_CHANNELS": channels}
         with patch.dict(os.environ, env, clear=True), patch.object(backfill, "STATE_FILE", state_path), \
              patch.object(backfill, "request_json", side_effect=fixture), patch.object(backfill, "post_batch", side_effect=post), \
-             patch.object(backfill, "post_entities"):
+             patch.object(backfill, "post_entities"), \
+             patch.object(backfill, "pb_post", return_value={"initialized": True, "selected": channels.split(","), "requests": []}):
             return backfill.main()
 
     def test_name_resolution_exact_ambiguous_and_missing(self):

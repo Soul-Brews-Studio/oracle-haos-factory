@@ -1,0 +1,3 @@
+{"staysOnDashboard":true,"visibleMessages":20,"guestImportDenied":true,"jobStatus":200,"jobConfigured":true,"jobState":"succeeded","queueStatus":202,"invalidBatchStatus":400,"channelListStatus":200,"channelCount":509,"petkeeperAuthUnchanged":true,"uiImport":"0 inserted, 1 updated","nameLookup":5,"channelCheckboxes":509,"modelTabVisible":true,"guildGroups":4,"rowSaveControls":509,"rawYamlLoaded":true,"modelRoundTrip":true,"invalidYamlPreserved":true,"yamlSaveRoundTrip":true}
+PANEL PROOF PASS
+

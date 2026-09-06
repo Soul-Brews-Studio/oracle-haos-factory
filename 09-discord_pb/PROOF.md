@@ -1,3 +1,90 @@
+# v0.1.7 — declared channel model and handle API (2026-09-06)
+
+**PASS — committed source/local fixtures only; STOP before deployment.**
+No kvmlab1 options, files, service state, or Discord messages were changed in
+this task. All source changes are under `09-discord_pb` on the lab branch.
+
+Fresh gates:
+
+```text
+Python: 68 tests OK (19 strict YAML model tests included)
+Bun SDK/CLI: 7 pass, 0 fail, 25 expect() calls
+DC API helper: 35 assertions passed
+TypeScript strict SDK typecheck: PASS
+JS syntax, Python compile, Bash syntax, ShellCheck, git diff --check: PASS
+Docker linux/arm64 build: PASS
+Docker linux/amd64 build: PASS
+Default-entrypoint ARM64 local fixture: LOCAL PROOF PASS
+Real PocketBase browser: auth refresh 200, records 200, 214 fixture messages
+Panel browser: PANEL PROOF PASS
+```
+
+Re-run static gates with Python/PyYAML available (local proof used an isolated
+venv, not a system install), plus Bun, Node, TypeScript and ShellCheck:
+
+```bash
+python3 -m venv /tmp/discord-pb-model-tests
+/tmp/discord-pb-model-tests/bin/pip install PyYAML
+PATH=/tmp/discord-pb-model-tests/bin:$PATH just verify
+# Build commands and local harness remain documented below.
+./tests/local-proof.sh --keep
+./tests/browser-proof.sh
+./tests/panel-proof.sh
+```
+
+## New proof coverage
+
+- Guild discovery lists a new thread without importing it. Initial options seed
+  selection once; deselection/model policies win over old options. Unsupported
+  channel types are rejected by model, initial seed, select and import gates.
+- Real PB list/read/name APIs: parent 205 messages, thread 3; proper date bounds;
+  ambiguous/missing names fail loudly; all `/api/dc/*` registrations require auth.
+- Invalid YAML, unknown names/actions, ambiguity, aliases, duplicate keys and
+  oversized documents are rejected. Failed saves leave the old file unchanged.
+- Wildcard defaults survive row edits and apply to future discovered threads;
+  concurrent row edits are serialized. ID-bound exports survive renamed entities.
+- Model policy overrides permissive legacy options; post and action grants are
+  independent. Gated post/thread/pin/archive reach **only a token-free local HTTP
+  fixture**. Pin uses the current message-pins endpoint. Writes are never retried.
+- Explicit channel import completes without altering polling selection. Successful
+  request acknowledgements are version-qualified; failures remain retryable.
+- Browser: 509 discovered entities/controls in four guild groups (includes a
+  deliberately synthetic 502-entity pagination stress index), 20 visible messages,
+  valid Model tab, row save → YAML → reload, raw YAML save → persisted bytes,
+  inline invalid-YAML feedback retaining the draft; desktop/mobile no overflow.
+- SDK's committed JSVM CommonJS build is generated from the TS source; parity
+  tests exercise synchronous transport without fetch or URLSearchParams globals.
+- Source SQLite main/WAL/SHM SHA256 unchanged. No old writer/listener restarted.
+- Independent targeted security/correctness review: **APPROVE**, after repairing
+  initial-seed importability, reload wake-up, and raw SDK/CLI YAML download.
+
+ARM64 image ran the complete container/browser fixture. AMD64 was built and the
+pinned executable version checked during build (emulated on this ARM64 host);
+this round does not claim native AMD64 runtime validation.
+
+Images:
+
+```text
+arm64 sha256:b5f3fa3b4cda541bd4ff54598ca742d2cf35ac315743cec5f81237b3b1794d7e
+amd64 sha256:0bf9f1a498fe11c3477607b6cf6e6d0e354aaace8f6379c568557d5a7d9e6a97
+```
+
+Evidence: [verification](evidence/dc-v0.1.7-verification.txt),
+[container/API/model proof](evidence/dc-v0.1.7-local.txt),
+[browser](evidence/dc-v0.1.7-browser.txt),
+[Model tab](evidence/dc-v0.1.7-panel.txt),
+[ARM64 build](evidence/dc-v0.1.7-build-arm64.txt),
+[AMD64 build](evidence/dc-v0.1.7-build-amd64.txt).
+Screenshots: [desktop](evidence/panel-desktop.png),
+[mobile](evidence/panel-mobile.png), [admin](evidence/admin-ingress.png).
+
+Deployment commands and merge-safe options are in [README.md](README.md).
+Mind map and oracle notes are next-round scope. API write success is not a claim
+of immediate PB ingestion, and two-request text-channel thread creation is not
+atomic. Historical archive parity is not implied by these fixture results.
+
+---
+
 # Local proof — 2026-09-06
 
 ## Reverse entity/name index — v0.1.3

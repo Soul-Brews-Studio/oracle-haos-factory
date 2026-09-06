@@ -1,5 +1,6 @@
 :root{color-scheme:light dark;--surface:#fff;--background:#f3f5f7;--ink:#18212b;--muted:#526070;--border:#ced5df;--accent:#285ae6;--button-ink:#fff;--error:#a72a21}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--background);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
 header,main,footer{max-width:1280px;margin:auto;padding:24px 32px}
 header{display:flex;align-items:center;justify-content:space-between;gap:24px;border-bottom:1px solid var(--border)}
@@ -17,7 +18,10 @@ input{font:inherit;border:1px solid var(--border);background:var(--surface);colo
 .input-row input{width:100%}label{display:block;margin:12px 0 6px;font-size:14px;font-weight:600}
 input[type=file]{width:100%;font-size:14px}
 .workspace{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr);gap:32px;margin-top:24px}
+.tabs{display:flex;gap:4px;margin-top:20px;border-bottom:1px solid var(--border)}
+.tab{border:0;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);min-height:40px;padding:7px 14px}.tab.active{background:var(--surface);color:var(--ink);box-shadow:inset 0 -3px var(--accent)}
 section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px}
+.model-view{margin-top:24px}.model-view>.section-heading{align-items:flex-start}.model-view>.section-heading p{margin-bottom:0}
 aside{display:grid;gap:24px;align-content:start}.hint,#page-label,footer{font-size:14px;color:var(--muted)}
 #login-status{margin:0}.error{color:var(--error)}#identity{margin-top:20px}
 #messages{padding:0;margin:16px 0;list-style:none}
@@ -28,6 +32,8 @@ aside{display:grid;gap:24px;align-content:start}.hint,#page-label,footer{font-si
 .message-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}
 .message-ids{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .copy{background:transparent;color:var(--accent);font-size:13px;padding:4px 10px;min-height:36px;margin-top:6px}
+.secondary{background:transparent;color:var(--accent);font-size:13px;min-height:36px;padding:4px 10px}
+.channel-list{display:grid;gap:12px}.guild-group{border:1px solid var(--border);border-radius:6px;overflow:hidden;padding:0}.guild-title{margin:0;padding:10px 12px;background:var(--background);font-size:15px}.channel-choice{display:grid;grid-template-columns:auto minmax(150px,1fr) minmax(110px,.7fr) minmax(100px,.7fr) auto minmax(110px,.8fr) auto;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--border);margin:0}.channel-choice.thread{padding-left:36px}.channel-choice input[type=text]{width:100%;font-size:13px}.channel-choice input[type=checkbox]{margin:0}.channel-name{display:block;font-weight:650;overflow-wrap:anywhere}.channel-detail{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.field-label{font-size:11px;color:var(--muted);margin:0}.row-save{font-size:12px;min-height:34px;padding:3px 9px}.yaml-editor{margin-top:20px}.yaml-editor textarea{width:100%;resize:vertical;font:13px/1.45 ui-monospace,monospace;background:var(--background);color:var(--ink);border:1px solid var(--border);padding:12px}.config-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .entity-row{border-top:1px solid var(--border);padding:12px 0;overflow-wrap:anywhere}
 .pagination{justify-content:space-between;margin-top:24px}
 pre,code{font-family:ui-monospace,monospace;font-size:13px;overflow-wrap:anywhere}
@@ -35,4 +41,5 @@ pre{white-space:pre-wrap;background:var(--background);padding:12px;border-radius
 summary{cursor:pointer;color:var(--accent);padding:12px 0}
 ::selection{background:var(--accent);color:var(--button-ink)}
 @media(prefers-color-scheme:dark){:root{--surface:#20262e;--background:#151a20;--ink:#eef1f6;--muted:#b1bdce;--border:#47515e;--accent:#97b6ff;--button-ink:#132348;--error:#ffaaa2}}
+@media(max-width:980px){.channel-choice{grid-template-columns:auto minmax(0,1fr) auto}.channel-policy{grid-column:2/-1}.channel-choice.thread{padding-left:24px}}
 @media(max-width:800px){header,main,footer{padding:20px}.workspace{grid-template-columns:1fr;gap:20px}header{align-items:flex-start;flex-direction:column}nav{flex-wrap:wrap}section{padding:20px}}

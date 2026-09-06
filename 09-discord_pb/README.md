@@ -14,9 +14,9 @@ not cause fallback to another service’s secrets.
 - `bot_token` (`password?`): no default, read only from `/data/options.json`.
   No password-manager, source-repo, environment or filesystem-token fallback.
   Missing token leaves backfill idle; PocketBase still starts.
-- `channels`: comma-separated channel/thread IDs or names. Names come from
+- `channels`: comma-separated channel/thread IDs or names, used **only as the initial selection** when no declared model exists. Later edits use the Model tab; restarting never re-enables a deselected channel. Names come from
   `discord_entities`, including entities discovered by `guilds` in the same poll.
-  Exact case wins, then Unicode case-insensitive exact matching across all pages.
+  Exact case wins, then Unicode case-insensitive exact, then unique substring matching across all pages.
   Missing or ambiguous names fail with candidate names and IDs. With no `guilds`,
   unknown channel names need one initial ID-based run to populate the index.
 - `guilds`: comma-separated guild IDs or names. Names bootstrap from the bot's
@@ -26,7 +26,7 @@ not cause fallback to another service’s secrets.
   threads when MANAGE_THREADS is unavailable. Only channels the bot can access
   can be archived; permission errors fail explicitly rather than claim parity.
   Forum/media containers are indexed but only their threads carry messages.
-  Guild selection walks the entire selected guild, not only named `channels`.
+  Guild discovery is **list-only**. It never implicitly selects channels or threads for import.
 - `poll_minutes`: 1–10080; default 60. Runs are serialized, not overlapping.
 - `admin_email` + `admin_password`: optional pair for manual admin access.
   Runtime bootstrap never puts passwords in argv or emits first-run token URLs.
@@ -111,7 +111,7 @@ with a historical SQLite archive and must be reported, not fabricated.
 ## Reproducible local proof
 
 Prerequisites: Docker, Python 3.10+, Bash. Runtime adds no third-party Python
-packages. Build the chosen local image (amd64 uses `BUILD_ARCH=amd64` and the
+packages except the server-side PyYAML parser (`py3-yaml`). For host tests, create a venv and install `PyYAML`; otherwise run them inside the image. Build the chosen local image (amd64 uses `BUILD_ARCH=amd64` and the
 `amd64-base` default):
 
 ```sh
@@ -230,3 +230,142 @@ Reference behavior was read from maw-atlas `lib/download-guild.ts`,
 [channel archive endpoints](https://docs.discord.com/developers/resources/channel),
 and [thread types](https://docs.discord.com/developers/topics/threads) confirm
 container types and the timestamp versus joined-private snowflake cursors.
+
+
+## Channel handles and declared model (v0.1.7)
+
+**List first, import by declaration.** `guilds` in the add-on options discovers
+channel/thread metadata every poll; only selected channels are imported. The
+`channels` option seeds the initial selection once. State persists in private
+PocketBase collections under `/data/pb_data`; the authoritative editable model
+is `/data/dc.config.yaml` when present. A checkbox or row save creates/updates
+that model, preserving earlier import choices and wildcard defaults.
+
+```yaml
+guilds:
+  "Soul Brews - Brewing for Life":
+    purpose: Oracle rooms
+    channels:
+      "*": {import: false, post: false, actions: []}
+      arra-01:
+        purpose: agent room
+        owner: arra-oracle
+        import: true
+        post: false
+        actions: []
+oracles:
+  arra-oracle:
+    home: [arra-01]
+    reads: []
+```
+
+Discover names first with `guilds`; unknown or ambiguous references report
+candidates rather than silently choosing. Python/PyYAML is the single model
+parser. Unknown keys/actions, wrong scalar types, duplicate keys, YAML aliases,
+and oversized documents are rejected. Saving binds names to quoted string IDs
+so later Discord renames do not change the selected identity. The tree retains
+human-readable names next to IDs. Successful saves normalize YAML formatting;
+comments are not preserved. IDs must be quoted in manually written YAML.
+
+The Model tab has a guild → channel → thread tree, per-row purpose/owner/import/
+post/actions, an explicit row-save button, and a raw YAML editor with validate,
+save, reload, and download-for-git. Invalid saves leave the old file unchanged.
+Writes are serialized with a file lock and published by private atomic rename.
+API access rereads the model, saves wake the poller, and normal polls also reload
+it: **no add-on restart is needed for model changes**. An in-progress channel
+sweep finishes; changes apply to the next sweep, not a cancellation mid-page.
+
+### Authorization and write policy
+
+Every `/api/dc/*` endpoint requires a PocketBase superuser session token, including
+the token minted by the existing HA ingress login. Merely sending HA headers is
+not authorization. The Discord bot token never goes to the SDK/browser.
+
+- No model: `allow_post: false` by default. Outbound Discord writes additionally
+  require the exact target in `post_channels` (IDs or unambiguous names).
+- Model present: configuration wins, even over enabled option overrides.
+  `post: true` grants message posting; each action (`thread`, `pin`, `archive`)
+  is granted **only** by membership in `actions`, independently of `post`.
+  Omitted channels/verbs are denied. Invalid models fail closed.
+- Reading, selection, configuration saves, and local import requests do not
+  require `allow_post`; that switch governs outbound Discord mutations.
+- No parent-to-thread write permission inheritance. Wildcards apply only within
+  their declared guild. Grant broad defaults deliberately, not accidentally.
+- A thread action in a text/announcement channel creates a starter message then
+  starts its thread. This is two Discord requests, not an atomic transaction;
+  failures are surfaced and writes are never automatically retried. Posted
+  content suppresses automatic mentions. A successful API response confirms
+  Discord accepted the write, not that it has already been polled into PB.
+
+### API and SDK
+
+| Route | Result |
+|---|---|
+| `GET /api/dc/channels` | Names, IDs, guild/parent/kind/archive state, own imported count, selection and policy; optional `?guild=<name-or-id>` |
+| `GET /api/dc/channels/{x}/read` | PB messages; `limit` 1–100, optional ISO `since` inclusive / `before` exclusive; parent reads exclude thread replies |
+| `POST /api/dc/channels/{x}/select` | `{on: boolean}` updates declared import selection |
+| `POST /api/dc/channels/{x}/import` | Queues that channel now, without selecting it for future polls; HTTP 202 is queue acceptance, not completion |
+| `POST /api/dc/channels/{x}/post` | `{text}` |
+| `POST /api/dc/channels/{x}/thread` | `{name, starter}`; starter is message text |
+| `POST /api/dc/channels/{x}/pin` | `{messageId}`; verifies message belongs to the target |
+| `POST /api/dc/channels/{x}/archive` | Archives a thread only |
+| `GET /api/dc/channels/{x}/allowed?verb=post` | Current policy check; no Discord side effect |
+| `GET /api/dc/config` / `config.yaml` | Resolved JSON / editable raw YAML |
+| `POST /api/dc/config/validate` / `save` | `{yaml: "..."}` or `{config: {...}}`; validation before persistence |
+| `POST /api/dc/config/channel/{id}` | Row policy patch: purpose, owner, import, post, actions |
+| `POST /api/dc/config/reload` | Validate the file and wake the existing serialized poller |
+
+Explicit import requests persist in PB with per-request IDs. Successful sweeps
+ack only the observed request version; a newer queued request is not deleted.
+Failures keep the request for a later attempt. Normal polling handles selected
+channels; explicit channel-only jobs do not sweep every configured guild.
+`GET /api/discord/backfill` exposes the existing global worker state.
+
+See [sdk/README.md](sdk/README.md) for Bun, CLI, and synchronous PocketBase JSVM
+usage. `sdk/dc.ts` is the typed source; `pb_hooks/lib/dc.js` is its committed
+CommonJS build for JSVM's non-async runtime. No maw plugin is included.
+
+### Upgrade gate (not executed)
+
+```bash
+SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+rsync -az --exclude proof-local/ --exclude __pycache__/ \
+  "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
+ssh kvmlab1.oracle.netbird \
+  'ha store reload && ha apps update local_discord_pb && ha apps restart local_discord_pb'
+```
+
+An image update/rebuild is required; restart alone will not install new source.
+Merge this non-secret example into existing options, preserving bot/admin/ingress
+settings. `channels` seeds only a fresh installation; use Model for existing
+selection. Neither discovery nor this example posts to Discord:
+
+```json
+{
+  "guilds": "Soul Brews - Brewing for Life",
+  "channels": "arra-01",
+  "poll_minutes": 5,
+  "allow_post": false,
+  "post_channels": "",
+  "auto_login": false,
+  "auto_login_ha_admins": false,
+  "auto_login_ha_user_ids": ""
+}
+```
+
+Mind-map rendering, per-oracle notes, and a maw plugin are intentionally deferred.
+
+
+Importable Discord types are text/announcement channels and threads
+(`0,5,10,11,12`). Other entities still appear in the tree, but their import
+controls are disabled. Initial selection, the select/import API, and effective
+model policies all reject unsupported types before storing an import choice.
+A wildcard `import: true` must explicitly exclude non-importable containers.
+
+Official API contracts checked for this implementation:
+[Discord messages/pins](https://docs.discord.com/developers/resources/message),
+[channels and thread creation](https://docs.discord.com/developers/resources/channel),
+[thread semantics](https://docs.discord.com/developers/topics/threads),
+[PocketBase blocking HTTP](https://pocketbase.io/docs/js-sending-http-requests/),
+and [PocketBase subprocess execution](https://pocketbase.io/jsvm/functions/_os.cmd.html).
+The pin action uses the current `/channels/{id}/messages/pins/{messageId}` route.

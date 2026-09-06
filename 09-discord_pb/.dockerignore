@@ -3,6 +3,7 @@
 !namespace_admin.py
 !service.py
 !backfill.py
+!dc_model.py
 !run.sh
 !pb_hooks/
 !pb_hooks/**

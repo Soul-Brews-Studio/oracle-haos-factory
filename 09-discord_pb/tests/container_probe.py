@@ -35,8 +35,34 @@ def upsert(messages):
         return {"status": error.code}
 
 
+def fixture_selection(targets, api):
+    """Test-only explicit selection; normal options seed only the first run."""
+    sys.path.insert(0, "/app")
+    import backfill
+    os.environ["DISCORD_PB_INTERNAL_TOKEN"] = pb_environment()["DISCORD_PB_INTERNAL_TOKEN"]
+    backfill.post_entities([backfill.entity(backfill.request_json(api + "/channels/" + target, {})) for target in targets])
+    config = json.loads(Path("/data/options.json").read_text())
+    def request(path, method="GET", body=None, token=None):
+        headers = {"Content-Type": "application/json"}
+        if token: headers["Authorization"] = token
+        with urlopen(Request("http://127.0.0.1:8110" + path, method=method, headers=headers,
+                data=None if body is None else json.dumps(body).encode()), timeout=20) as response:
+            return json.load(response)
+    token = request("/api/collections/_superusers/auth-with-password", "POST", {
+        "identity": config["admin_email"], "password": config["admin_password"]})["token"]
+    path = "/api/collections/dc_channel_selection/records"
+    rows = request(path + "?perPage=500", token=token)["items"]
+    for row in rows:
+        request(path + "/" + row["id"], "PATCH", {"on": row["entity_id"] in targets}, token)
+    present = {row["entity_id"] for row in rows}
+    for target in targets:
+        if target not in present:
+            request(path, "POST", {"entity_id": target, "on": True}, token)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "backfill":
+        fixture_selection(sys.argv[3].split(","), sys.argv[2])
         env = os.environ.copy()
         env.update(DISCORD_PB_INTERNAL_TOKEN=pb_environment()["DISCORD_PB_INTERNAL_TOKEN"],
                    DISCORD_PB_FIXTURE="true", DISCORD_BOT_TOKEN="", DISCORD_API_BASE=sys.argv[2],
