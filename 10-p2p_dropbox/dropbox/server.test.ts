@@ -102,3 +102,7 @@ describe("server", () => {
     expect((await fetch(`${base}/watch/fixture`)).status).toBe(404);
   });
 });
+test("published port cannot spoof ingress with forwarded/user/admin headers", async () => {
+  const response=await fetch(`${base}/auth/ingress`,{method:"POST",headers:{"x-ingress-path":"/api/hassio_ingress/proof","x-remote-user-id":"admin","x-remote-user-is-admin":"true","x-forwarded-for":"172.30.32.2","x-real-ip":"172.30.32.2"}});
+  expect(response.status).toBe(403);const body=await response.json();expect(body.ingress).toBeFalse();expect(body.user_id).toBe("");expect(body.token).toBeUndefined();
+});

@@ -36,3 +36,21 @@ test("invalid size and STUN rejected", () => {
   for (const max_file_mb of [0, -1, 1.5, 10241, "12"]) expect(() => optionsEnvironment({...options(), max_file_mb})).toThrow("max_file_mb");
   expect(() => optionsEnvironment({...options(), stun_servers: ["https://example.org"]})).toThrow("STUN");
 });
+test("auto-login migration defaults preserve existing auth and support exact ID lists", () => {
+  const original = options();
+  const env = optionsEnvironment(original);
+  expect(env.AUTH_KEY).toBe(original.auth_key);
+  expect(env.AUTO_LOGIN).toBe("true");
+  expect(env.AUTO_LOGIN_HA_ADMINS).toBe("true");
+  expect(env.AUTO_LOGIN_HA_USER_IDS).toBe("");
+  const restricted = optionsEnvironment({...original, auto_login: false, auto_login_ha_admins: false, auto_login_ha_user_ids: " user-1, user-2 "});
+  expect(restricted.AUTO_LOGIN).toBe("false");
+  expect(restricted.AUTO_LOGIN_HA_ADMINS).toBe("false");
+  expect(restricted.AUTO_LOGIN_HA_USER_IDS).toBe(" user-1, user-2 ");
+});
+test("invalid auto-login booleans or user list fail closed", () => {
+  for (const name of ["auto_login", "auto_login_ha_admins"]) {
+    for (const value of ["true", "false", 0, 1, []]) expect(() => optionsEnvironment({...options(), [name]: value})).toThrow("boolean");
+  }
+  for (const auto_login_ha_user_ids of [[], "bad\nuser", "user.*", "x".repeat(129)]) expect(() => optionsEnvironment({...options(), auto_login_ha_user_ids})).toThrow();
+});

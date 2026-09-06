@@ -1,7 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Login from "./pages/Login";
 import Dropbox from "./pages/Dropbox";
-import { getApiKey, setApiKey, validateApiKey, type AppConfig } from "./lib/api";
+import {
+  bootstrapIngressAuth,
+  clearIngressSession,
+  getIngressSession,
+  getManualApiKey,
+  onAuthFailed,
+  setApiKey,
+  setIngressSession,
+  validateApiKey,
+  type AppConfig,
+  type IngressAuthResult,
+} from "./lib/api";
 
 const GLOBAL_STYLES = `
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,9 +23,12 @@ const GLOBAL_STYLES = `
 `;
 
 export default function App() {
-  const [key, setKey] = useState(getApiKey());
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [checking, setChecking] = useState(Boolean(key));
+  const [checking, setChecking] = useState(true);
+  const [denial, setDenial] = useState<IngressAuthResult | null>(null);
+  const [sessionExpiry, setSessionExpiry] = useState<number | null>(null);
+  const attemptRef = useRef(0);
+  const ingressIdentityRef = useRef({ userId: "", userName: "" });
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -23,30 +37,142 @@ export default function App() {
     return () => { document.head.removeChild(style); };
   }, []);
 
+  const connectThroughIngress = useCallback(async (allowManualFallback: boolean) => {
+    const attempt = ++attemptRef.current;
+    setChecking(true);
+    try {
+      const result = await bootstrapIngressAuth();
+      if (attempt !== attemptRef.current) return;
+      if (result.ok) {
+        const session = setIngressSession(result);
+        const nextConfig = await validateApiKey(session.token);
+        if (attempt !== attemptRef.current) return;
+        ingressIdentityRef.current = { userId: session.userId, userName: session.userName };
+        setConfig(nextConfig);
+        setSessionExpiry(session.expiresAt);
+        setDenial(null);
+        return;
+      }
+
+      clearIngressSession();
+      setSessionExpiry(null);
+      setDenial(result.ingress ? result : null);
+      if (allowManualFallback) {
+        const savedKey = getManualApiKey();
+        if (savedKey) {
+          const nextConfig = await validateApiKey(savedKey);
+          if (attempt !== attemptRef.current) return;
+          setConfig(nextConfig);
+          setDenial(null);
+          return;
+        }
+      }
+      setConfig(null);
+    } catch {
+      if (attempt !== attemptRef.current) return;
+      clearIngressSession();
+      if (allowManualFallback) {
+        const savedKey = getManualApiKey();
+        if (savedKey) {
+          try {
+            const nextConfig = await validateApiKey(savedKey);
+            if (attempt !== attemptRef.current) return;
+            setConfig(nextConfig);
+            return;
+          } catch {
+            setApiKey("");
+          }
+        }
+      }
+      const identity = ingressIdentityRef.current;
+      if (!allowManualFallback && (identity.userId || identity.userName)) {
+        setDenial({
+          ok: false,
+          ingress: true,
+          error: "Home Assistant authorization could not be refreshed.",
+          user_id: identity.userId,
+          user_name: identity.userName,
+          allowlistOption: "auto_login_ha_user_ids",
+        });
+      }
+      setSessionExpiry(null);
+      setConfig(null);
+    } finally {
+      if (attempt === attemptRef.current) setChecking(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!key) return;
-    validateApiKey(key).then(setConfig).catch(() => {
+    void connectThroughIngress(true);
+    return () => { attemptRef.current += 1; };
+  }, [connectThroughIngress]);
+
+  useEffect(() => {
+    if (!sessionExpiry || !getIngressSession()) return;
+    const delay = Math.max(1_000, sessionExpiry * 1_000 - Date.now() - 60_000);
+    const timer = window.setTimeout(() => void connectThroughIngress(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [connectThroughIngress, sessionExpiry]);
+
+  const handleAuthFailed = useCallback(() => {
+    const session = getIngressSession();
+    const identity = session
+      ? { userId: session.userId, userName: session.userName }
+      : ingressIdentityRef.current;
+    attemptRef.current += 1;
+    clearIngressSession();
+    setSessionExpiry(null);
+    setConfig(null);
+    if (identity.userId || identity.userName) {
+      setDenial({
+        ok: false,
+        ingress: true,
+        error: "Your Home Assistant session is no longer authorized.",
+        user_id: identity.userId,
+        user_name: identity.userName,
+        allowlistOption: "auto_login_ha_user_ids",
+      });
+    } else {
       setApiKey("");
-      setKey("");
-    }).finally(() => setChecking(false));
-  }, [key]);
+      setDenial(null);
+    }
+    setChecking(false);
+  }, []);
+
+  useEffect(() => onAuthFailed(handleAuthFailed), [handleAuthFailed]);
 
   const handleConnect = (newKey: string, newConfig: AppConfig) => {
+    attemptRef.current += 1;
+    clearIngressSession();
+    ingressIdentityRef.current = { userId: "", userName: "" };
     setApiKey(newKey);
     setConfig(newConfig);
-    setKey(newKey);
+    setSessionExpiry(null);
+    setDenial(null);
   };
 
   const handleLogout = () => {
+    attemptRef.current += 1;
     setApiKey("");
+    clearIngressSession();
+    ingressIdentityRef.current = { userId: "", userName: "" };
     setConfig(null);
-    setKey("");
+    setSessionExpiry(null);
+    setDenial(null);
+    setChecking(false);
   };
 
-  if (checking) {
+  if (checking && !config) {
     return <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "#64748b" }}>Connecting…</div>;
   }
-  if (!key || !config) return <Login onConnect={handleConnect} />;
+  if (!config) return (
+    <Login
+      onConnect={handleConnect}
+      denial={denial}
+      onConnectWithHomeAssistant={() => void connectThroughIngress(false)}
+      homeAssistantLoading={checking}
+    />
+  );
 
   return (
     <div style={{ minHeight: "100dvh" }}>
@@ -66,7 +192,7 @@ export default function App() {
         </div>
       </header>
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "1.5rem" }}>
-        <Dropbox config={config} onAuthFailed={handleLogout} />
+        <Dropbox config={config} onAuthFailed={handleAuthFailed} />
       </main>
     </div>
   );

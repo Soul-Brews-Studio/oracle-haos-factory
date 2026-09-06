@@ -6,11 +6,21 @@ function text(value: unknown, name: string): string {
   if (typeof value !== "string" || /[\r\n\0]/.test(value)) throw new Error(`${name} must be a single-line string`);
   return value;
 }
+function boolean(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${name} must be boolean`);
+  return value;
+}
 export function optionsEnvironment(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("options must be an object");
   const o = value as Record<string, unknown>;
   const auth = text(o.auth_key ?? "", "auth_key").trim();
   if (!auth) throw new Error("auth_key is required; Nat must set it via add-on options");
+  const autoLogin = boolean(o.auto_login ?? true, "auto_login");
+  const autoAdmins = boolean(o.auto_login_ha_admins ?? true, "auto_login_ha_admins");
+  const autoUsers = text(o.auto_login_ha_user_ids ?? "", "auto_login_ha_user_ids");
+  if (autoUsers.length > 16384 || !autoUsers.split(",").every(id => !id.trim() || /^[A-Za-z0-9_-]{1,128}$/.test(id.trim()))) {
+    throw new Error("auto_login_ha_user_ids must be comma-separated HA user IDs");
+  }
   const save = text(o.save_dir ?? "/share/p2p", "save_dir");
   if (!save.startsWith("/share/") || resolve(save) !== save || save === "/share/") throw new Error("save_dir must be a normalized subdirectory of /share");
   const max = o.max_file_mb ?? 1024;
@@ -28,6 +38,7 @@ export function optionsEnvironment(value: unknown): Record<string, string> {
     HOST: "0.0.0.0", PORT: "3847", SIGNAL_URL: "ws://127.0.0.1:3847/ws",
     PEER_NAME: "p2p-dropbox", DEFAULT_PEER: "p2p-dropbox", MAX_FILE_MB: String(max),
     STUN_SERVERS: JSON.stringify(stun), TURN_URLS: turn, TURN_USER: user, TURN_CRED: pass,
+    AUTO_LOGIN: String(autoLogin), AUTO_LOGIN_HA_ADMINS: String(autoAdmins), AUTO_LOGIN_HA_USER_IDS: autoUsers,
   };
 }
 

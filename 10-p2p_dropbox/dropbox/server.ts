@@ -5,7 +5,10 @@ import {
   realpathSync, statSync, unlinkSync, writeFileSync,
 } from "fs";
 import { timingSafeEqual } from "crypto";
+import { adminChecker, readAdminIds } from "./ha-admin";
 import type { WsData } from "./types";
+import { ingressIdentity, ingressAllowed, ingressApiRoute, mintIngressToken, verifyIngressToken,
+  INGRESS_SESSION_TTL_SECONDS, type IngressPolicy } from "./ingress";
 import {
   createScopedToken, HEARTBEAT_INTERVAL_MS, sanitizeRoom, SignalingHub, verifyScopedToken,
 } from "./signaling";
@@ -16,6 +19,14 @@ const WEB_DIST = resolve(import.meta.dir, "web-dist");
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT) || 3847;
 const AUTH_KEY = (process.env.AUTH_KEY || "").trim();
+const INGRESS_POLICY: IngressPolicy = {
+  enabled: process.env.AUTO_LOGIN !== "false", admins: process.env.AUTO_LOGIN_HA_ADMINS !== "false",
+  userIds: (process.env.AUTO_LOGIN_HA_USER_IDS || "").split(",").map(id => id.trim()).filter(Boolean),
+  // Runtime-only override for an isolated local proof proxy, never a HA option.
+  peer: process.env.INGRESS_TRUSTED_PEER || "172.30.32.2",
+};
+const isHaAdmin = adminChecker(() => readAdminIds(
+  process.env.HA_CORE_WS_URL || "ws://supervisor/core/websocket", process.env.SUPERVISOR_TOKEN || ""));
 const MAX_FILE_MB = positiveNumber(process.env.MAX_FILE_MB, 10_240);
 const MAX_FILE_SIZE = Math.floor(MAX_FILE_MB * 1024 * 1024);
 // Hono's multipart parser buffers the request. Bound that memory independently
@@ -193,13 +204,39 @@ function listAllFiles(): FileInfo[] {
   return results.sort((a, b) => b.modified.localeCompare(a.modified));
 }
 
-const app = new Hono();
+const app = new Hono<{ Bindings: { peerAddress: string; identity: ReturnType<typeof ingressIdentity> }; Variables: { ingressSession: boolean } }>();
 app.get("/health", (c) => c.json({ ok: true }));
+app.post("/auth/ingress", (c) => {
+  c.header("Cache-Control", "no-store");
+  c.header("Vary", "X-Ingress-Path, X-Remote-User-Id");
+  const identity = c.env?.identity || null;
+  if (!identity || !ingressAllowed(identity, INGRESS_POLICY)) {
+    return c.json({ ok: false, ingress: !!identity,
+      error: !identity ? "Home Assistant ingress required" : !INGRESS_POLICY.enabled ? "auto_login is off" :
+        !identity.user_id ? "HA ingress did not provide a user id" : "HA user not allowed",
+      user_id: identity?.user_id || "", user_name: identity?.user_name || "",
+      allowlistOption: "auto_login_ha_user_ids",
+    }, 403);
+  }
+  return c.json({ ok: true, ingress: true, token: mintIngressToken(AUTH_KEY, identity, "api"),
+    expires_at: Math.floor(Date.now() / 1000) + INGRESS_SESSION_TTL_SECONDS,
+    user_id: identity.user_id, user_name: identity.user_name,
+  });
+});
 app.use("/api/*", async (c, next) => {
-  if (!keyMatches(requestKey(c))) {
+  c.header("Cache-Control", "no-store");
+  const master = keyMatches(requestKey(c));
+  const identity = c.env?.identity || null;
+  // Session tokens are header-only, scope-limited, and unusable on the direct port
+  // or under another HA user/prefix. Existing CLI master-key auth stays unchanged.
+  const session = verifyIngressToken((c.req.header("authorization") || "").replace(/^Bearer /i, ""),
+    AUTH_KEY, identity, "api", INGRESS_POLICY);
+  if (!master && !session) {
     accessLog("AUTH_FAIL", `${c.req.method} ${c.req.path}`, getClientIp(c));
     return c.json({ error: "unauthorized" }, 401);
   }
+  if (!master && !ingressApiRoute(c.req.method, c.req.path)) return c.json({ error: "session scope denied" }, 403);
+  c.set("ingressSession", !master && session);
   await next();
 });
 
@@ -208,7 +245,9 @@ app.get("/api/config", (c) => c.json({
   max_file_mb: MAX_FILE_MB,
   http_max_file_mb: HTTP_MAX_FILE_SIZE / 1024 / 1024,
   receiver_peer_name: "p2p-dropbox",
-  signal_token: createScopedToken(AUTH_KEY, "signal", SIGNAL_TOKEN_TTL_SECONDS),
+  signal_token: c.get("ingressSession")
+    ? mintIngressToken(AUTH_KEY, c.env.identity!, "signal")
+    : createScopedToken(AUTH_KEY, "signal", SIGNAL_TOKEN_TTL_SECONDS),
 }));
 
 app.get("/api/files", (c) => {
@@ -311,18 +350,27 @@ Bun.serve<WsData>({
   hostname: HOST,
   port: PORT,
   maxRequestBodySize: HTTP_MAX_FILE_SIZE + 1024 * 1024,
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
+    const peerAddress = server.requestIP(req)?.address || "";
+    const identity = ingressIdentity(req.headers, peerAddress, INGRESS_POLICY.peer);
+    if (identity?.user_id && INGRESS_POLICY.enabled && INGRESS_POLICY.admins &&
+        !INGRESS_POLICY.userIds.includes(identity.user_id) &&
+        (url.pathname === "/auth/ingress" || url.pathname.startsWith("/api/") || url.pathname === "/ws")) {
+      identity.is_admin = await isHaAdmin(identity.user_id);
+    }
     if (url.pathname === "/ws") {
       const authorized = keyMatches(url.searchParams.get("key") || "") ||
-        verifyScopedToken(url.searchParams.get("token") || "", AUTH_KEY, "signal");
+        verifyScopedToken(url.searchParams.get("token") || "", AUTH_KEY, "signal") ||
+        verifyIngressToken(url.searchParams.get("token") || "", AUTH_KEY,
+          identity, "signal", INGRESS_POLICY);
       if (!authorized) return new Response("unauthorized", { status: 401 });
       const room = sanitizeRoom(url.searchParams.get("room"));
       if (!room) return new Response("invalid room", { status: 400 });
       if (server.upgrade(req, { data: { id: crypto.randomUUID(), room } })) return;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
-    return app.fetch(req);
+    return app.fetch(req, { peerAddress, identity });
   },
   websocket: {
     maxPayloadLength: 1024 * 1024,

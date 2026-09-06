@@ -1,5 +1,5 @@
 name: "P2P Dropbox"
-version: "0.1.0"
+version: "0.1.1"
 slug: "p2p_dropbox"
 description: "Self-contained WebRTC dropbox, local signaling and HTTP fallback."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/02-p2p-dropbox-kvmlab1/10-p2p_dropbox"
@@ -8,7 +8,7 @@ startup: application
 boot: auto
 init: false
 hassio_api: false
-homeassistant_api: false
+homeassistant_api: true
 host_network: false
 ingress: true
 ingress_port: 3847
@@ -23,6 +23,9 @@ map:
   - share:rw
 stage: experimental
 options:
+  auto_login: true
+  auto_login_ha_admins: true
+  auto_login_ha_user_ids: ""
   auth_key: ""
   save_dir: /share/p2p
   stun_servers:
@@ -33,6 +36,9 @@ options:
   turn_user: ""
   turn_pass: ""
 schema:
+  auto_login: bool
+  auto_login_ha_admins: bool
+  auto_login_ha_user_ids: str?
   auth_key: password?
   save_dir: str
   stun_servers:

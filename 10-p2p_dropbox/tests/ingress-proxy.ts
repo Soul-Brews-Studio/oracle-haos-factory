@@ -3,7 +3,17 @@
 import type { ServerWebSocket } from "bun";
 const upstream = process.env.UPSTREAM;
 if (!upstream || !/^http:\/\/127\.0\.0\.1:\d+$/.test(upstream)) throw new Error("UPSTREAM must be a loopback Docker URL");
-const prefix = "/api/hassio_ingress/local-proof/";
+const prefix = `/api/hassio_ingress/${process.env.PROOF_PREFIX || "local-proof"}/`;
+const BunSocket = WebSocket as unknown as { new(url: URL, options: Bun.WebSocketOptions): WebSocket };
+function ingressHeaders(request: Request): Headers {
+  const headers = new Headers(request.headers);
+  headers.set("x-ingress-path", prefix.slice(0, -1));
+  headers.set("x-remote-user-id", process.env.PROOF_USER_ID || "fixture-admin");
+  headers.set("x-remote-user-name", process.env.PROOF_USER_NAME || "Fixture User");
+  headers.delete("x-remote-user-is-admin");
+  headers.delete("host");
+  return headers;
+}
 type Connection = { upstream: WebSocket; queue: (string | Buffer)[]; downstream?: ServerWebSocket<Connection> };
 const proxy = Bun.serve<Connection>({
   hostname: "127.0.0.1", port: Number(process.env.PROXY_PORT || 0),
@@ -13,7 +23,7 @@ const proxy = Bun.serve<Connection>({
     const url = new URL(incoming.pathname.slice(prefix.length) + incoming.search, upstream + "/");
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       url.protocol = "ws:";
-      const socket = new WebSocket(url);
+      const socket = new BunSocket(url, { headers: Object.fromEntries(ingressHeaders(request)) });
       const connection: Connection = { upstream: socket, queue: [] };
       socket.onopen = () => { for (const data of connection.queue) socket.send(typeof data === "string" ? data : new Uint8Array(data)); connection.queue = []; };
       socket.onmessage = event => connection.downstream?.send(typeof event.data === "string" ? event.data : Buffer.from(event.data));
@@ -23,9 +33,7 @@ const proxy = Bun.serve<Connection>({
       socket.close();
       return new Response("upgrade failed", { status: 400 });
     }
-    const headers = new Headers(request.headers);
-    headers.set("x-ingress-path", prefix.slice(0, -1));
-    headers.delete("host");
+    const headers = ingressHeaders(request);
     return fetch(url, { method: request.method, headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body, redirect: "manual" });
   },
   websocket: {

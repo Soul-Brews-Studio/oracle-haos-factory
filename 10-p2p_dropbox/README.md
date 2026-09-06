@@ -35,6 +35,9 @@ Replace the placeholder locally in Supervisor, never in git:
 ```json
 {
   "auth_key": "<NAT_SETS_A_STRONG_UNIQUE_KEY>",
+  "auto_login": true,
+  "auto_login_ha_admins": true,
+  "auto_login_ha_user_ids": "",
   "save_dir": "/share/p2p",
   "stun_servers": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"],
   "max_file_mb": 1024,
@@ -86,7 +89,34 @@ overlapping files on a single channel are rejected because chunks have no file I
 
 ## Ingress and trust boundary
 
-Open the sidebar panel and enter Nat's configured auth key. The page uses relative
+The sidebar auto-connects by default for a verified HA admin (or explicitly
+allowlisted HA user). Direct `:3847` access retains the key form. Denied ingress
+users see **Not allowed**, their HA user ID and a copy button, plus manual-key
+fallback. Set `auto_login: false` to require the key everywhere;
+`auto_login_ha_admins: false` restricts auto-login to the comma-separated
+`auto_login_ha_user_ids` list. Existing options remain valid: omitted new fields
+use `true`, `true`, and `""` respectively; the existing auth key is not changed.
+
+Trust requires the actual Supervisor socket peer (`172.30.32.2`), a valid ingress
+path and HA user ID. Forwarded IP/admin headers cannot grant access. `panel_admin`
+only gates the sidebar menu, so admin membership is checked server-side through
+HA Core `config/auth/list` (active owner or `system-admin` group), not inferred
+from seeing the panel. This requires **`homeassistant_api: true`**, which grants
+Core API access to the add-on; `hassio_api` remains false. The implementation only
+reads the user directory. Lookup failure denies the admin path; explicit ID
+allowlisting and manual-key access remain available. Admin results cache for at
+most 60 seconds; failed refresh discards prior grants.
+
+The bootstrap returns a five-minute HMAC bearer bound to this app, HA user ID,
+ingress path and API scope. It lives **only in SPA memory** (no auth cookie or
+browser storage); all its API and derived WS tokens require the same trusted
+ingress identity. It permits config/files/preview/upload, not logs or arbitrary
+API routes. The master key and Supervisor token are never included in bootstrap
+responses. Tokens renew before expiry; failures return to login, and Disconnect
+stays disconnected until explicit HA reconnect or page reload. Manual key entry
+retains the existing tab-session behavior.
+
+The page uses relative
 URLs under the HA ingress prefix, without external fonts or a remote signal server.
 The browser stores its key only in path-namespaced sessionStorage; logout removes
 that key without touching PocketBase/other add-on storage. Downloads/previews use
@@ -94,15 +124,15 @@ authenticated fetch/blob URLs. Signaling uses a five-minute, audience/scope-boun
 HMAC token, refreshed on reconnect; the master key is never baked into HTML or
 placed in browser URLs.
 
-`/api/*` always requires the master key; a scoped signaling token cannot read or
-write files. `/ws` accepts the scoped signaling token or CLI master-key auth.
+`/api/*` requires the master key or a valid route-scoped ingress API session; a
+scoped signaling token cannot read or write files. `/ws` accepts the scoped signaling token or CLI master-key auth.
 Token scope is not silently widened: **watch tokens are rejected**, and `/watch/*`
 is explicitly 404. Terminal viewing, LIFF, D1 event logging, sharing, open/lock auth
 bypass and the old Worker's admin routes are not shipped. Existing remote watch
 pages/tokens and the Cloudflare deployment remain untouched.
 
 The requested direct 3847/tcp mapping is also reachable outside HA ingress. Unlike
-an ingress-only service, every API/WS request still requires the add-on key; an
+an ingress-only service, direct API/WS requests still require key-based authentication; an
 `X-Ingress-Path` header never grants access. Keep this port on trusted LAN/NetBird,
 never expose it publicly. HTTP/WS on the direct port has no application TLS; use
 trusted mesh transport or an SSH tunnel. WebRTC encrypts file DataChannels.
@@ -190,3 +220,14 @@ A loopback-only ingress test proxy lives at `tests/ingress-proxy.ts`.
   deletion of user files or other add-on data is performed.
 
 Upstream provenance and bounded vendor changes: [VENDORED.md](VENDORED.md).
+
+## Auto-login references and proof
+
+- [HA ingress identity headers](https://developers.home-assistant.io/docs/apps/security/#authenticating-a-user-when-using-ingress)
+- [HA Core access from add-ons](https://developers.home-assistant.io/docs/apps/communication/#home-assistant-core)
+- [Core admin-only user listing](https://github.com/home-assistant/core/blob/dev/homeassistant/components/config/auth.py)
+- Local browser harness: `bun tests/autologin-harness.ts` (Ctrl-C cleans up). It uses
+  fake ingress headers, fake Core users, disposable credentials and a loopback-only
+  server. `INGRESS_TRUSTED_PEER` / `HA_CORE_WS_URL` are runtime-only test overrides,
+  not Supervisor options; do not override them in deployment.
+- Fresh dual-arch build, CLI hash and regression evidence: `evidence/autologin/`.
