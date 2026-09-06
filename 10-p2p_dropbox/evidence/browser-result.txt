@@ -1,0 +1,9 @@
+BROWSER real Chromium (ego-browser), simulated HA ingress prefix
+LOGIN invalid key rejected; configured disposable fixture key accepted
+ASSETS all same-origin and /api/hassio_ingress/local-proof/ prefixed
+SIGNAL receiver p2p-dropbox discovered via local WebSocket
+DROP browser-fixture.txt: authenticated HTTP fallback
+BROWSER source_sha256=7df65a0f80f21f8bfcd3da651de696b62fb0e93cc5efd804ffb2f503d3e3ed07 receiver_sha256=7df65a0f80f21f8bfcd3da651de696b62fb0e93cc5efd804ffb2f503d3e3ed07 MATCH
+URLS no master key in resource URLs; no external HTTP resource requests
+LOGOUT session key cleared; PocketBase localStorage sentinel unchanged
+LIMITATION browser P2P failed ICE on Mac/Colima with empty and default STUN; no TURN supplied. CLI host-to-Docker passes after SDP-order fix.

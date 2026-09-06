@@ -1,0 +1,87 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.23kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/oven/bun:1.3.14-alpine
+#2 ...
+
+#3 [internal] load metadata for ghcr.io/home-assistant/amd64-base:3.22
+#3 DONE 0.8s
+
+#2 [internal] load metadata for docker.io/oven/bun:1.3.14-alpine
+#2 DONE 0.9s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 109B done
+#4 DONE 0.0s
+
+#5 [stage-1  1/13] FROM ghcr.io/home-assistant/amd64-base:3.22@sha256:536c6164d3ef70a275573334e3c52b77e4cb90a90776e0ca609089deb5357b25
+#5 resolve ghcr.io/home-assistant/amd64-base:3.22@sha256:536c6164d3ef70a275573334e3c52b77e4cb90a90776e0ca609089deb5357b25 0.0s done
+#5 CACHED
+
+#6 [bun 1/1] FROM docker.io/oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
+#6 resolve docker.io/oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 0.0s done
+#6 CACHED
+
+#7 [internal] load build context
+#7 transferring context: 1.41kB done
+#7 DONE 0.0s
+
+#8 [stage-1  2/13] RUN apk add --no-cache libstdc++ libgcc ca-certificates
+#8 0.097 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+#8 0.538 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+#8 1.156 OK: 26 MiB in 50 packages
+#8 DONE 1.3s
+
+#9 [stage-1  3/13] COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+#9 DONE 0.0s
+
+#10 [stage-1  4/13] RUN test "$(bun --version)" = "1.3.14"
+#10 DONE 0.1s
+
+#11 [stage-1  5/13] WORKDIR /app/dropbox
+#11 DONE 0.0s
+
+#12 [stage-1  6/13] COPY dropbox/package.json dropbox/bun.lock ./
+#12 DONE 0.0s
+
+#13 [stage-1  7/13] RUN bun install --frozen-lockfile --production
+#13 0.117 bun install v1.3.14 (0d9b296a)
+#13 136.5
+#13 136.5 + hono@4.12.27
+#13 136.5 + werift@0.23.0
+#13 136.5
+#13 136.5 58 packages installed [136.41s]
+#13 DONE 136.5s
+
+#14 [stage-1  8/13] COPY dropbox/*.ts ./
+#14 DONE 0.1s
+
+#15 [stage-1  9/13] COPY dropbox/web-dist/ ./web-dist/
+#15 DONE 0.0s
+
+#16 [stage-1 10/13] COPY options.ts health.ts /app/
+#16 DONE 0.0s
+
+#17 [stage-1 11/13] COPY run.sh /run.sh
+#17 DONE 0.0s
+
+#18 [stage-1 12/13] COPY rootfs/ /
+#18 DONE 0.0s
+
+#19 [stage-1 13/13] RUN mkdir -p /data /share  && chmod 0755 /run.sh /etc/cont-init.d/10-p2p-options /etc/services.d/*/run
+#19 DONE 0.1s
+
+#20 exporting to image
+#20 exporting layers
+#20 exporting layers 1.6s done
+#20 exporting manifest sha256:f8f4443f96f69b6de430abdb5267f9bd38c63357e090449b80cb9248e5932ff8 done
+#20 exporting config sha256:9a291756342fba4187a013178d98a600cfcf8fe1ddfe62d08100d537963b2228 done
+#20 exporting attestation manifest sha256:67310309ed3512378942cb1333ce5c74a117787b1b0ddeb4700354618b173ba8 done
+#20 exporting manifest list sha256:5ee16355d73e079a0358fdeb69369a641d2441b5fa1dc92089ca39e91cc07016 done
+#20 naming to docker.io/library/p2p-dropbox:amd64 done
+#20 DONE 1.6s
+
+View build details: docker-desktop://dashboard/build/colima/colima/nbozsa76o4l20b3wc60y7aqwg

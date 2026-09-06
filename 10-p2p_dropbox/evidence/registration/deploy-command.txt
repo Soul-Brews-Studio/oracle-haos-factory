@@ -1,0 +1,10 @@
+Command completed successfully.
+The use of 'addons' is deprecated, please use 'apps' instead!
+Command completed successfully.
+The use of 'addons' is deprecated, please use 'apps' instead!
+Command completed successfully.
+The use of 'addons' is deprecated, please use 'apps' instead!
+{
+  "state": "started",
+  "version": "0.1.2"
+}

@@ -1,0 +1,50 @@
+bun test v1.3.14 (0d9b296a)
+
+tests/options.test.ts:
+(pass) empty auth fails closed [0.45ms]
+(pass) defaults use share and local signaling [0.10ms]
+(pass) configured TURN and empty STUN are supported [0.02ms]
+(pass) partial TURN fails closed [0.02ms]
+(pass) unsafe paths and multiline env injection are rejected [0.05ms]
+(pass) invalid size and STUN rejected [0.04ms]
+
+dropbox/transfer.test.ts:
+(pass) ReceiverTransferSession > isolates binary ownership by DataChannel session [2.34ms]
+(pass) ReceiverTransferSession > treats binary JSON-looking bytes as file content [0.48ms]
+(pass) ReceiverTransferSession > rejects malformed, oversized, and duplicate active starts [0.54ms]
+(pass) ReceiverTransferSession > rejects sensitive filenames before opening a partial file [0.25ms]
+(pass) ReceiverTransferSession > rejects overflow and removes partial files [22.72ms]
+(pass) ReceiverTransferSession > disconnect and incomplete end clean up without success ACK [22.86ms]
+(pass) ReceiverTransferSession > commit errors remove the published file and never send a success ACK [0.65ms]
+
+dropbox/signaling.test.ts:
+(pass) SignalingHub > relays offer, answer, and ICE only inside the authenticated connection's room [0.16ms]
+(pass) SignalingHub > peer lists and presence notifications are room-isolated [0.14ms]
+(pass) SignalingHub > ignores malformed and non-object JSON messages without disconnecting [0.06ms]
+(pass) SignalingHub > pings at a heartbeat and removes peers only after 60 seconds without activity [0.09ms]
+(pass) room names are bounded and default safely [0.03ms]
+(pass) scoped HMAC tokens enforce signature, audience, scope, and expiry [0.18ms]
+
+dropbox/negotiation.test.ts:
+(pass) signals werift's post-gather local SDP instead of the candidate-free draft [75.08ms]
+
+dropbox/ui.test.ts:
+(pass) ingress-relative frontend routing > keeps API calls under the Home Assistant ingress prefix [0.04ms]
+(pass) ingress-relative frontend routing > selects only the exact configured receiver [0.05ms]
+(pass) ingress-relative frontend routing > does not auto-select ambiguous duplicate receiver names
+(pass) browser ICE ordering > queues candidates received before the answer and drains afterward [0.13ms]
+
+dropbox/server.test.ts:
+(pass) server > keeps health public and configuration authenticated [1.01ms]
+(pass) server > uploads bounded files without overwriting and downloads as attachments [2.48ms]
+(pass) server > does not follow upload-directory symlinks [1.23ms]
+(pass) server > accepts signal tokens but rejects watch-scoped tokens [0.98ms]
+
+dropbox/http-limit.test.ts:
+(pass) HTTP buffering has a 32 MiB ceiling independent of larger P2P maximum [0.81ms]
+(pass) only one buffered HTTP upload can be active [52.86ms]
+
+ 30 pass
+ 0 fail
+ 108 expect() calls
+Ran 30 tests across 7 files. [304.00ms]

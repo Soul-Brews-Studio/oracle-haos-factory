@@ -1,0 +1,75 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.13kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
+#3 DONE 1.5s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 109B done
+#4 DONE 0.0s
+
+#5 [bun 1/1] FROM docker.io/oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
+#5 resolve docker.io/oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 done
+#5 DONE 0.0s
+
+#6 [stage-1  1/13] FROM ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a
+#6 resolve ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 276.22kB done
+#7 DONE 0.0s
+
+#8 [stage-1  2/13] RUN apk add --no-cache libstdc++ libgcc ca-certificates
+#8 CACHED
+
+#9 [stage-1  3/13] COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+#9 CACHED
+
+#10 [stage-1  5/13] WORKDIR /app/dropbox
+#10 CACHED
+
+#11 [stage-1  4/13] RUN test "$(bun --version)" = "1.3.14"
+#11 CACHED
+
+#12 [stage-1  6/13] COPY dropbox/package.json dropbox/bun.lock ./
+#12 CACHED
+
+#13 [stage-1  7/13] RUN bun install --frozen-lockfile --production
+#13 CACHED
+
+#14 [stage-1  8/13] COPY dropbox/*.ts ./
+#14 DONE 0.0s
+
+#15 [stage-1  9/13] COPY dropbox/web-dist/ ./web-dist/
+#15 DONE 0.0s
+
+#16 [stage-1 10/13] COPY options.ts health.ts /app/
+#16 DONE 0.0s
+
+#17 [stage-1 11/13] COPY run.sh /run.sh
+#17 DONE 0.0s
+
+#18 [stage-1 12/13] COPY rootfs/ /
+#18 DONE 0.0s
+
+#19 [stage-1 13/13] RUN mkdir -p /data /share  && chmod 0755 /run.sh /etc/cont-init.d/10-p2p-options /etc/services.d/*/run
+#19 DONE 0.1s
+
+#20 exporting to image
+#20 exporting layers 0.0s done
+#20 exporting manifest sha256:1a47f552779ba5ccc51c778091d240db11cf8c892e93cd331bca9f2e04c92bd9 done
+#20 exporting config sha256:88e1bb66b0293bded78d1f2bb1baf871f4e6dc9526cd9541f759a3f208d15e19 done
+#20 exporting attestation manifest sha256:d764054632fc85aa509a10cbaee986a3777541cbe9b55ced8438e1906ce6a349 done
+#20 exporting manifest list sha256:a183f47387f0f920a4b0f4dde0a62a35099b80ee559eaad20d262f034c46348f done
+#20 naming to docker.io/library/p2p-dropbox:arm64 done
+#20 unpacking to docker.io/library/p2p-dropbox:arm64 0.0s done
+#20 DONE 0.1s
+
+View build details: docker-desktop://dashboard/build/colima/colima/vsaxckkr14ymyhgkffwi8nwj4

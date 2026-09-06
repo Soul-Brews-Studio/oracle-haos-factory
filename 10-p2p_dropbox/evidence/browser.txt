@@ -1,0 +1,66 @@
+root
+  container
+    container
+      svg_root
+      text "P2P Dropbox"
+    button [ref=284, loc=unstable]
+      text "Disconnect"
+  container
+    container
+      container
+      text "Signaling"
+      text "web-1115-0mqq"
+    container
+      container
+        heading
+          text "Send to"
+        container
+          text "1"
+          text "peer"
+      button [ref=321, loc=unstable]
+        container
+        container
+          text "p2p-dropbox"
+          text "Failed"
+    container
+      svg_root
+      paragraph
+        text "Drag & drop files here"
+      paragraph
+        text "Connecting to p2p-dropbox..."
+      paragraph
+        text "HTTP fallback limit:"
+        text "1"
+        text "MiB; larger files require P2P"
+    container
+      heading
+        text "Files ("
+        text "1"
+        text ")"
+      container
+        combobox [ref=274, loc=unstable]
+          text "Sort: Date"
+        button [ref=315, loc=unstable]
+          text "Refresh"
+    container
+      container
+        text "2026-09-06"
+        text "("
+        text "1"
+        text ")"
+      container
+        svg_root
+        container
+          text "2026-09-06-04-18-42_browser-fixture.txt"
+          text "just now"
+        text "29 B"
+        button "Download 2026-09-06-04-18-42_browser-fixture.txt" [ref=372, loc=css:button[aria-label="Download 2026-09-06-04-18-42_browser-fixture.txt"]]
+          svg_root
+    container
+      heading
+        text "Activity"
+      container
+        text "11:18:42 AM — HTTP upload saved: browser-fixture.txt"
+        text "11:18:42 AM — HTTP fallback → browser-fixture.txt (29 B)"
+        text "11:15:56 AM — Signaling connected"
+        text "11:15:56 AM — Signaling connected"

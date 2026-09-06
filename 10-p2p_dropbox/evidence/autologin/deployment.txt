@@ -1,0 +1,30 @@
+TARGET kvmlab1 local_p2p_dropbox
+SOURCE_COMMIT 6b7dfd41fd1d65f9581a3002814c695838151850
+ha store reload: Command completed successfully.
+ha addons update local_p2p_dropbox: Command completed successfully.
+ha addons restart local_p2p_dropbox: Command completed successfully.
+ha addons info local_p2p_dropbox --raw-json (filtered):
+{
+  "state": "started",
+  "version": "0.1.1"
+}
+OPTIONS=all_existing_values_unchanged (including auth_key; never printed)
+DIRECT_NO_KEY=401
+DIRECT_WITH_EXISTING_KEY=200
+DIRECT_FORGED_INGRESS=403
+REAL_CORE_ADMIN_LOOKUP=PASS count=2
+LEDGER=original_prefix_SHA256_MATCH append_only=true appended_bytes=302
+ORIGINAL_DATA_FILES=9 SHA256_MATCH
+CURRENT_SHARE_FILES=11
+PASS original 10 entries preserved; one concurrent lab03 transfer added
+
+Ingress UI auto-connect was browser-proved in the localhost harness with fake
+trusted ingress headers and a fake Core admin directory (see browser.txt).
+Live Core admin lookup used a temporary loopback SSH tunnel and the existing SSH
+add-on Supervisor credential in memory, not a newly chosen deployment key.
+The protected SSH add-on cannot Docker-exec; its protection settings were not
+changed. The Core proxy permitted admin lookup but denied supervisor/api ingress
+session creation (unauthorized), so live HA-browser auto-connect is NOT claimed.
+Browser control had been taken by the user; automation remained paused rather
+than taking it back or using another task space. Nat's live panel refresh remains
+an explicit browser-session check, not evidence inferred from direct-port curl.

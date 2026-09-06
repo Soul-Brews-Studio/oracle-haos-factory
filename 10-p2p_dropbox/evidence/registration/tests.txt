@@ -1,0 +1,108 @@
+bun test v1.3.14 (0d9b296a)
+
+tests/options.test.ts:
+(pass) optional schema auth still fails closed when missing, null, empty or whitespace [0.46ms]
+(pass) empty or null optional TURN fields disable TURN [0.14ms]
+(pass) defaults use share and local signaling [0.02ms]
+(pass) configured TURN and empty STUN are supported [0.02ms]
+(pass) partial TURN fails closed [0.02ms]
+(pass) unsafe paths and multiline env injection are rejected [0.06ms]
+(pass) invalid size and STUN rejected [0.03ms]
+(pass) auto-login migration defaults preserve existing auth and support exact ID lists [0.03ms]
+(pass) invalid auto-login booleans or user list fail closed [0.06ms]
+(pass) room defaults migrate old options and validate configured room [0.04ms]
+
+tests/web-room.test.ts:
+(pass) web API URLs preserve ingress prefix, use scoped tokens and configured room [0.63ms]
+
+dropbox/web-auth.test.ts:
+(pass) browser ingress authentication > keeps a scoped ingress token in memory and preserves manual storage [0.11ms]
+(pass) browser ingress authentication > bootstraps with a relative request and no authorization credential [0.16ms]
+(pass) browser ingress authentication > fails closed and clears an ingress token on HTTP 401 [0.15ms]
+(pass) browser ingress authentication > a stale HTTP 401 cannot clear a newer ingress session [0.08ms]
+(pass) browser ingress authentication > a malformed refresh cannot replace the current valid session [0.02ms]
+
+dropbox/ha-admin.test.ts:
+(pass) admin cache refreshes after 60s and fails closed instead of retaining stale grants [0.15ms]
+(pass) Core websocket uses only auth and config/auth/list; active owner/admin membership required [1.89ms]
+(pass) missing Core credentials and unresponsive lookup reject [33.21ms]
+
+dropbox/transfer.test.ts:
+(pass) ReceiverTransferSession > isolates binary ownership by DataChannel session [2.54ms]
+(pass) ReceiverTransferSession > treats binary JSON-looking bytes as file content [0.44ms]
+(pass) ReceiverTransferSession > rejects malformed, oversized, and duplicate active starts [0.49ms]
+(pass) ReceiverTransferSession > rejects sensitive filenames before opening a partial file [0.24ms]
+(pass) ReceiverTransferSession > rejects overflow and removes partial files [20.64ms]
+(pass) ReceiverTransferSession > disconnect and incomplete end clean up without success ACK [20.85ms]
+(pass) ReceiverTransferSession > commit errors remove the published file and never send a success ACK [0.88ms]
+
+dropbox/signaling.test.ts:
+(pass) SignalingHub > relays offer, answer, and ICE only inside the authenticated connection's room [0.20ms]
+(pass) SignalingHub > peer lists and presence notifications are room-isolated [0.10ms]
+(pass) SignalingHub > rejects a duplicate identified name without disturbing the incumbent [0.07ms]
+(pass) SignalingHub > checks uniqueness after sanitizing names [0.04ms]
+(pass) SignalingHub > allows the same peer to reidentify with its own name and the same name in another room [0.03ms]
+(pass) SignalingHub > does not reserve anonymous names until identify and releases names on rename and disconnect [0.05ms]
+(pass) SignalingHub > releases an identified name when heartbeat removes a zombie [0.06ms]
+(pass) SignalingHub > ignores malformed and non-object JSON messages without disconnecting [0.06ms]
+(pass) SignalingHub > pings at a heartbeat and removes peers only after 60 seconds without activity [0.03ms]
+(pass) room names are bounded and default safely [0.01ms]
+(pass) scoped HMAC tokens enforce signature, audience, scope, and expiry [0.18ms]
+
+dropbox/ingress-http.test.ts:
+(pass) direct bootstrap denied, allowed ingress gets no-store scoped session; no master in response [4.42ms]
+(pass) denied ingress gets safe identity and allowlist hint; forged admin header grants nothing [0.47ms]
+
+dropbox/client-url.test.ts:
+(pass) CLI room defaults and query/env precedence; keys safely encoded [0.13ms]
+
+dropbox/ingress.test.ts:
+(pass) ingress requires actual socket peer and valid path; headers cannot grant admin [0.10ms]
+(pass) auto-login requires enabled policy, identity and verified admin or exact allowlist [0.04ms]
+(pass) HA token binds audience, scope, identity, prefix, expiry and live policy without key disclosure [0.17ms]
+(pass) API session scope excludes logs, unknown routes and mutations other than upload [0.04ms]
+
+dropbox/negotiation.test.ts:
+(pass) signals werift's post-gather local SDP instead of the candidate-free draft [53.43ms]
+
+dropbox/ui.test.ts:
+(pass) ingress-relative frontend routing > keeps API calls under the Home Assistant ingress prefix [0.02ms]
+(pass) ingress-relative frontend routing > selects only the exact configured receiver [0.04ms]
+(pass) ingress-relative frontend routing > does not auto-select ambiguous duplicate receiver names
+(pass) browser ICE ordering > queues candidates received before the answer and drains afterward [0.11ms]
+
+dropbox/server.test.ts:
+(pass) server > keeps health public and configuration authenticated [1.16ms]
+(pass) server > uploads bounded files without overwriting and downloads as attachments [2.44ms]
+(pass) server > does not follow upload-directory symlinks [1.15ms]
+(pass) server > accepts signal tokens but rejects watch-scoped tokens [1.00ms]
+(pass) published port cannot spoof ingress with forwarded/user/admin headers [0.19ms]
+
+dropbox/http-limit.test.ts:
+(pass) HTTP buffering has a 32 MiB ceiling independent of larger P2P maximum [0.89ms]
+(pass) only one buffered HTTP upload can be active [52.97ms]
+
+client/maw-dropbox/dropbox-extras.test.ts:
+(pass) statistics > summarizes validated listings [0.14ms]
+(pass) statistics > accepts an empty listing [0.02ms]
+(pass) statistics > rejects malformed or unsafe data [0.02ms]
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) output safety > escapes all HTML metacharacters [0.05ms]
+(pass) output safety > escapes listing metadata and rejects credential-bearing dashboard URLs [0.89ms]
+(pass) command grammar and rooms > parses extras and rejects stray options [0.05ms]
+(pass) command grammar and rooms > blocks named-room delegation only where old transport would lie [0.02ms]
+(pass) decorator integration > delegates old commands and refuses named-room sends before transport [2.98ms]
+(pass) decorator integration > dashboard supports punctuation-only keys without corrupting JSON [1.38ms]
+(pass) decorator integration > renders authenticated stats and a secret-free escaped dashboard [1.37ms]
+(pass) installer > installs and removes without changing unrelated files or manifest fields [28.68ms]
+(pass) installer > refuses another wrapper and symlinked plugin directories [28.65ms]
+
+ 74 pass
+ 0 fail
+ 325 expect() calls
+Ran 74 tests across 14 files. [417.00ms]

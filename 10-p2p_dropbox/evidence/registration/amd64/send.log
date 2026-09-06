@@ -1,0 +1,13 @@
+[06:34:47] Connecting to signaling...
+[06:34:47] Connected as "cli-1334-5ii2" (2 peers online)
+[06:34:47] Found target: p2p-dropbox (245344b3)
+[06:34:47] Offer sent to target
+[06:34:47] P2P DataChannel open — sending files...
+[06:34:47] Sending: p2p-fixture.bin (192.1 KB)
+
+  33% (64.0 KB / 192.1 KB)
+  67% (128.0 KB / 192.1 KB)
+  100% (192.0 KB / 192.1 KB)
+  100% (192.1 KB / 192.1 KB)
+[06:34:48] Delivered: p2p-fixture.bin (192.1 KB confirmed by receiver)
+[06:34:48] Done: 1 delivered, 0 failed

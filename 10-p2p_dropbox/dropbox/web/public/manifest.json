@@ -1,0 +1,21 @@
+{
+  "name": "P2P Dropbox",
+  "short_name": "P2P Dropbox",
+  "description": "Local peer-to-peer file transfer with an authenticated HTTP fallback",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "./icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "./icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

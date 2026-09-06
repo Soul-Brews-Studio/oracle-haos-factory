@@ -1,0 +1,16 @@
+[
+  {
+    "tag": [
+      "p2p-dropbox:arm64"
+    ],
+    "id": "sha256:a183f47387f0f920a4b0f4dde0a62a35099b80ee559eaad20d262f034c46348f",
+    "architecture": "arm64"
+  },
+  {
+    "tag": [
+      "p2p-dropbox:amd64"
+    ],
+    "id": "sha256:c57e9f0b1b9608c857a26fb6bae11004d2b687b4357baeaea12e5a253f9f7d68",
+    "architecture": "amd64"
+  }
+]

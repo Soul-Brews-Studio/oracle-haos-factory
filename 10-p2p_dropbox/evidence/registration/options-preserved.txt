@@ -1,0 +1,4 @@
+STATE started VERSION 0.1.2
+OPTIONS all existing values including auth_key preserved: PASS
+TURN unset: PASS
+NEW OPTION KEYS ['room']

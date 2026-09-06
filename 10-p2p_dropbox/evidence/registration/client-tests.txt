@@ -1,0 +1,26 @@
+bun test v1.3.14 (0d9b296a)
+
+client/maw-dropbox/dropbox-extras.test.ts:
+(pass) statistics > summarizes validated listings [0.24ms]
+(pass) statistics > accepts an empty listing [0.02ms]
+(pass) statistics > rejects malformed or unsafe data [0.03ms]
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) statistics > rejects malformed or unsafe data
+(pass) output safety > escapes all HTML metacharacters [0.07ms]
+(pass) output safety > escapes listing metadata and rejects credential-bearing dashboard URLs [0.93ms]
+(pass) command grammar and rooms > parses extras and rejects stray options [0.07ms]
+(pass) command grammar and rooms > blocks named-room delegation only where old transport would lie [0.02ms]
+(pass) decorator integration > delegates old commands and refuses named-room sends before transport [2.27ms]
+(pass) decorator integration > dashboard supports punctuation-only keys without corrupting JSON [1.52ms]
+(pass) decorator integration > renders authenticated stats and a secret-free escaped dashboard [1.38ms]
+(pass) installer > installs and removes without changing unrelated files or manifest fields [29.35ms]
+(pass) installer > refuses another wrapper and symlinked plugin directories [28.76ms]
+
+ 18 pass
+ 0 fail
+ 47 expect() calls
+Ran 18 tests across 1 file. [76.00ms]

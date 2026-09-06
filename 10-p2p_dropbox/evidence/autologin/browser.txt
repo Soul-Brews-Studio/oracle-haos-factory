@@ -1,0 +1,10 @@
+Real Chromium, ego-browser, isolated localhost fake-ingress/HA-Core harness.
+Observed before browser control was taken over by the user:
+ADMIN: P2P Dropbox / Disconnect / P2P Connected / p2p-dropbox P2P Ready.
+ADMIN DOM check: hasPassword=false; sessionStorage keys=[]; fixture file listed.
+DENIED: Not allowed / HA user not allowed / Home Assistant user ID fixture-denied / Copy ID / key form fallback.
+DIRECT: Connect / Enter the auth key configured for this add-on / key form.
+Remaining interactive copy/logout/manual/allowlist assertions were interrupted by
+user control takeover and are NOT claimed as browser-verified. Browser automation
+was paused, not rerouted into another task space. Unit/integration coverage is in
+tests.log; real deployment verification is recorded separately.

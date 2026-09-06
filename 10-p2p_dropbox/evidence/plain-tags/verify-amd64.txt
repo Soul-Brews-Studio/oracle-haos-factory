@@ -1,0 +1,8 @@
+IMAGE p2p-dropbox:amd64
+STARTUP empty auth_key rejected
+AUTH missing key: HTTP 401; WS 401
+P2P mode=host source_sha256=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed receiver_sha256=a199f8633e990db39f94e1ec8384b241557e2b0edf325786e13ab31be4fa17ed MATCH
+HTTP source_sha256=7534025daf463231f6051daa42c98a68e5ccac31ae13f81cf5442360f3f16e30 receiver_sha256=7534025daf463231f6051daa42c98a68e5ccac31ae13f81cf5442360f3f16e30 MATCH
+LIMIT HTTP oversized upload rejected
+S6 server=up receiver=up
+PASS local verify; no Supervisor install; deployment auth_key unset
