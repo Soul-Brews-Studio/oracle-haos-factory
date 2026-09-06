@@ -1,0 +1,44 @@
+discord_pb 0.2.1 on kvmlab1 — 2026-09-07 00:30–00:40 +07 (HA 2026.8.3, HAOS 18.2)
+Deployed with `just deploy` (rsync → ha store reload → ha store apps update → running version read back).
+
+Add-on log after the update:
+  services-up: info: copying legacy longrun discord-gateway (no readiness notification)
+  services-up: info: copying legacy longrun ha-admins (no readiness notification)
+  2026/09/07 00:29:49 Server started at http://0.0.0.0:8110
+
+Auto-login through the verified-admin path (allowlist EMPTY, auto_login_ha_admins=true):
+  bun tools/ha-sidebar.ts … servers  -> 12 servers listed (the owner passed the HA-admin check)
+
+NEGATIVE PROOF (temporary non-admin HA user, created and deleted by the owner over the HA websocket):
+  created non-admin user fb93c2c4ecbd4f79a506dc6635512af0 (dc-probe-nonadmin), groups=["system-users"]
+  non-admin got ingress entry /api/hassio_ingress/If_O10M3W2… and a session: true      <- HA allows this
+  admin-token as non-admin -> HTTP 403 {"error":"HA user is not an administrator", "haUser":{"id":"fb93c2c4…","name":"dc-probe-nonadmin"}, …}
+  entities lookup without token as non-admin -> HTTP 401
+  NEGATIVE PROOF PASS
+  deleted fb93c2c4ecbd4f79a506dc6635512af0 ; probe users remaining: 0
+  (Before 0.2.1 the same request minted a PocketBase superuser token — review finding C1.)
+
+HA sidebar, one entry per server (`just sidebar-sync`):
+  ✓ updated dc-1501389910530064497 Arthur Visions ; ✓ pinned 11 more (Cat Lab & Co, Cat Lab X,
+  dryoungdo wellness clinic, HUMAN SCHOOL | buildwithoracle.com, Mini lab, nat's ARRA Oracles,
+  nat's August 2026, Oracle School🔮 | school.buildwithoracle.com, Phd Oracle,
+  Soul Brews - Brewing for Life, ฝ่ายบัญชีเคอิชู)
+  each = storage dashboard dc-<guild id>, iframe strategy -> <ingress entry>/simple.html?guild=<id>
+
+Open/hide round-trip, app -> HA sidebar:
+  POST /api/dc/sidebar {hide:[1536315880198246480]} -> 200 hidden:["1536315880198246480"]
+  just sidebar-sync  -> ✓ hidden dc-1536315880198246480 ; list shows ○ (show_in_sidebar=false)
+  POST /api/dc/sidebar {show:[1536315880198246480]} -> 200 hidden:[]
+  just sidebar-sync  -> ✓ updated dc-1536315880198246480 ; list shows ● again
+
+Browser (ego-browser, HA owner session; Page.captureScreenshot still times out in this browser, DOM only):
+  /local_discord_pb            -> "Discord Archive – Home Assistant", iframe panel.html "406 messages in 4 channels"
+  …/simple.html                -> 12 servers, 513 rooms, opens on "# green-finance" (Arthur Visions, 3 messages)
+                                  — firstRoom now prefers a room that holds messages
+  token poisoned in localStorage, then rail pick "Soul Brews" -> "# mawjs-oracle · 1 messages" loaded
+                                  (api() re-signed on 401 — review finding C3)
+  /dc-1410301189123342488      -> "Soul Brews - Brewing for Life – Home Assistant", iframe: guilds=1,
+                                  focus title "Soul Brews - Brewing for Life", h1 "# mawjs-oracle", "1 messages"
+
+Local (m5) before deploy: 89 python tests OK (PyYAML venv), node tests OK (sidebar, tree, ha_admins,
+dc_api 35, timeline 16), node --check on every hook/lib/migration/UI file, py_compile, bash -n, shellcheck.

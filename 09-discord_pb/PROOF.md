@@ -549,3 +549,54 @@ after rsync does not replace the embedded code. Commands leave options intact.
 Use the names-based options example in README, preserving credentials and
 existing values. Live Discord parity remains a separate credential/target and
 operator-run verification gate, not a claim made by the local fixture.
+
+## Server-by-server sidebar — v0.2.0 / v0.2.1 (2026-09-07, deployed to kvmlab1)
+
+Scope: `09-discord_pb/` on `lab/03-discord-sidebar-kvmlab1` (branched from
+`lab/01-discord-pb-kvmlab1` at `227b7ac`). This round **did deploy**: the goal
+was the live box, and every claim below was read back from kvmlab1.
+
+Shipped:
+
+- `GET/POST /api/dc/sidebar` (`pb_hooks/240_sidebar.pb.js`, `lib/dc_sidebar.js`):
+  guilds with counts, channels with Discord category (`raw.parent_id`) and
+  position, shared open/hidden/collapsed/order preferences in `dc_settings`.
+- `simple.html` rebuilt as server → category → channel → thread, each server
+  open/close and hide/show, categories collapse, Servers dialog with ordering,
+  `?guild=` focus, `keepIngressAlive` when embedded in an HA dashboard iframe.
+- `tools/ha-sidebar.ts` + `just sidebar-*`: one HA dashboard per server
+  (iframe strategy onto the ingress entry), show/hide via `show_in_sidebar`.
+- `justfile` deploy recipes for kvmlab1 (rsync → `ha store reload` →
+  update or rebuild by measured version → poll the running version).
+
+Failures found and repaired on the way:
+
+- First deploy of 0.2.0 answered 500 on `/api/dc/sidebar`. Reproduced with a
+  local PocketBase 0.29.3 + the hooks (paths patched): `sidebarPrefs is not
+  defined` — PocketBase runs every handler in its own JS runtime, so a helper
+  defined at the hook file's top level does not exist inside handlers. Moved it
+  into `lib/dc_sidebar.js` (`readPrefs`). Same session also caught a
+  dangling-`else` in the selection branch and `record.get()` on a JSON field
+  (bytes, not text) — now `getString`. Local re-test: GET 200, POST 200/400/401,
+  prefs round-trip through `dc_settings`.
+- HA 2026.8 serves an add-on panel at `/<slug>`; `/hassio/ingress/<slug>`
+  answers a plain `404: Not Found`. The first browser attempt read that 404 as
+  "no ingress cookie" until the route was measured.
+
+Live evidence for 0.2.0 (rebuilt): [`evidence/sidebar-v0.2.0-kvmlab1-browser.txt`](evidence/sidebar-v0.2.0-kvmlab1-browser.txt)
+— 12 servers, 559 rooms (254 under categories), open/close, hide/show,
+category collapse, dialog, persistence read back from the API, `?guild=` focus,
+and the pinned HA dashboard `dc-1501389910530064497` rendering the focused view.
+
+Proof-read (4-lens adversarial review, 44 agents, 20 findings, 10 confirmed)
+fixed in v0.2.1 — see the commit `fix(discord-pb): proof-read fixes` for the
+list. The one that mattered most: `auto_login_ha_admins` trusted
+`panel_admin: true`, which only hides the sidebar entry; any HA user can mint
+an ingress session. `ha_admins.py` now asks HA core who the administrators are
+and the hook fails closed (`tests/test_ha_admins.{py,js}`).
+
+Live evidence for 0.2.1: [`evidence/sidebar-v0.2.1-kvmlab1.txt`](evidence/sidebar-v0.2.1-kvmlab1.txt)
+— ha-admins service up, owner auto-login with an empty allowlist, a temporary
+non-admin HA user refused with `HA user is not an administrator` (and 401 on
+the name lookup), 12 servers synced into the HA sidebar, hide/show round-trip
+app → `just sidebar-sync` → `show_in_sidebar`, and the expired-token re-sign.
