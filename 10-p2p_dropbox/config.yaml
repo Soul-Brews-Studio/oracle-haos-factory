@@ -1,0 +1,43 @@
+name: "P2P Dropbox"
+version: "0.1.0"
+slug: "p2p_dropbox"
+description: "Self-contained WebRTC dropbox, local signaling and HTTP fallback."
+url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/02-p2p-dropbox-kvmlab1/10-p2p_dropbox"
+arch: [amd64, aarch64]
+startup: application
+boot: auto
+init: false
+hassio_api: false
+homeassistant_api: false
+host_network: false
+ingress: true
+ingress_port: 3847
+panel_icon: mdi:folder-upload
+panel_title: "P2P Dropbox"
+panel_admin: true
+ports:
+  3847/tcp: 3847
+ports_description:
+  3847/tcp: "Authenticated HTTP API and WebSocket signaling for LAN/NetBird CLI peers"
+map:
+  - share:rw
+stage: experimental
+options:
+  auth_key: ""
+  save_dir: /share/p2p
+  stun_servers:
+    - stun:stun.l.google.com:19302
+    - stun:stun1.l.google.com:19302
+  max_file_mb: 1024
+  turn_url: ""
+  turn_user: ""
+  turn_pass: ""
+schema:
+  auth_key: password
+  save_dir: str
+  stun_servers:
+    - str
+  max_file_mb: int(1,10240)
+  turn_url: str
+  turn_user: str
+  turn_pass: password

@@ -1,0 +1,6 @@
+#!/usr/bin/with-contenv sh
+# shellcheck shell=sh
+set -eu
+cd /app/dropbox
+# Receiver reconnects while the server starts/restarts; s6 supervises both.
+exec s6-envdir /run/p2p/env bun receiver.ts

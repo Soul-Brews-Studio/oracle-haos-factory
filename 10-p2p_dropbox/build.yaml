@@ -1,0 +1,3 @@
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base:3.22@sha256:536c6164d3ef70a275573334e3c52b77e4cb90a90776e0ca609089deb5357b25
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.22@sha256:0f19d1a4b031b3d141945a906e7c0d09fc98c796c18e2ea9072bce8e0b67578a

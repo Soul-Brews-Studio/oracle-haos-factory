@@ -1,0 +1,17 @@
+{
+  "name": "phd-dropbox",
+  "version": "0.1.0",
+  "description": "WebRTC + HTTP file dropbox for PhD satellite data fleet",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "start": "bun run server.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "werift": "^0.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

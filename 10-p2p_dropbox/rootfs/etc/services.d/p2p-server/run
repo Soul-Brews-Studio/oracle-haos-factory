@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv sh
+# shellcheck shell=sh
+set -eu
+cd /app/dropbox
+exec s6-envdir /run/p2p/env bun server.ts
