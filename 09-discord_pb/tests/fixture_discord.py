@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 DATA = json.loads(Path(os.environ["FIXTURE_JSON"]).read_text())
-STATS = {"after_requests": [], "before_requests": [], "pages": 0, "rate_limits": 0, "authorization_headers": 0, "retry_wait": 0}
+STATS = {"after_requests": [], "before_requests": [], "pages": 0, "rate_limits": 0, "authorization_headers": 0, "retry_wait": 0, "guild_walks": 0, "archived_requests": 0}
 LAST_RATE_LIMIT = 0
 
 
@@ -33,13 +33,23 @@ class Discord(BaseHTTPRequestHandler):
         guild = re.fullmatch(r"/guilds/(\d+)(/channels|/threads/active)?", path.path)
         if guild and guild[1] in guild_ids:
             if guild[2] == "/channels":
+                STATS["guild_walks"] += 1
+                if guild[1] == "900000000000000002" and STATS["guild_walks"] >= 2:
+                    DATA["900000000000000005"] = {"metadata": {
+                        "id": "900000000000000005", "name": "proof-new-thread", "type": 11,
+                        "parent_id": "900000000000000004", "guild_id": guild[1]}, "messages": []}
                 return self.reply([row["metadata"] for row in DATA.values() if row["metadata"].get("guild_id") == guild[1] and row["metadata"].get("type") not in {10,11,12}])
             if guild[2] == "/threads/active":
-                return self.reply({"threads": [row["metadata"] for row in DATA.values() if row["metadata"].get("guild_id") == guild[1] and row["metadata"].get("type") in {10,11,12}]})
+                return self.reply({"threads": [row["metadata"] for row in DATA.values() if row["metadata"].get("guild_id") == guild[1] and row["metadata"].get("type") in {10,11,12} and not row["metadata"].get("thread_metadata", {}).get("archived")]})
             return self.reply({"id": guild[1], "name": "Proof Guild" if guild[1] == "900000000000000002" else "Guild " + guild[1]})
-        archived = re.fullmatch(r"/channels/(\d+)/threads/archived/public", path.path)
+        archived = re.fullmatch(r"/channels/(\d+)/(?:users/@me/)?threads/archived/(public|private)", path.path)
         if archived:
-            return self.reply({"threads": [], "has_more": False})
+            STATS["archived_requests"] += 1
+            rows = [row["metadata"] for row in DATA.values()
+                    if row["metadata"].get("parent_id") == archived[1]
+                    and row["metadata"].get("thread_metadata", {}).get("archived")
+                    and (row["metadata"].get("type") == 12) == (archived[2] == "private")]
+            return self.reply({"threads": rows, "has_more": False})
         match = re.fullmatch(r"/channels/(\d+)(/messages)?", path.path)
         if not match or match[1] not in DATA:
             self.send_error(404)

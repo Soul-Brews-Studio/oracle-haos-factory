@@ -94,6 +94,7 @@ def make_fixture(path):
         metadata = {"id": target, "name": "proof-general" if target == PARENT else "proof-thread", "type": 0 if target == PARENT else 11, "guild_id": GUILD}
         if target == THREAD:
             metadata["parent_id"] = PARENT
+            metadata["thread_metadata"] = {"archived": True, "archive_timestamp": "2026-09-05T00:00:00+00:00"}
         data[target] = {"metadata": metadata, "rate_limit": target == PARENT,
             "messages": [{"id": str(900000000100000000 + index + (1000 if target == THREAD else 0)),
                 "author": {"id": AUTHOR, "global_name": "Proof ✓", "bot": True},
@@ -243,7 +244,23 @@ def main():
         assert {(row["kind"], row["name"]) for row in proof_entities} >= {
             ("guild", "Proof Guild"), ("channel", "proof-general"),
             ("channel", "proof-random"), ("thread", "proof-thread")}
-        log("PASS guild name resolves; fixture discovers 2 channels + 1 thread and upserts reverse entities")
+        by_id = {row["entity_id"]: row for row in proof_entities}
+        assert by_id[PARENT]["parent_id"] == GUILD and by_id[PARENT2]["parent_id"] == GUILD
+        assert by_id[THREAD]["parent_id"] == PARENT and by_id[THREAD]["archived"] is True
+        assert not by_id[GUILD]["parent_id"]
+        log("PASS named guild: 2 channels + 1 archived thread; channel→guild/thread→channel hierarchy")
+        repeat_guild = command("docker", "exec", app, "python3", "/tests/container_probe.py", "guild",
+                               "http://fixture:18080", "Proof Guild", "proof-general")
+        repeated = json.loads(repeat_guild.splitlines()[-1])
+        assert repeated["complete"] is True and repeated["inserted"] == 0 and repeated["channels"] == 4
+        state = json.loads(command("docker", "exec", app, "cat", "/data/backfill-state.json"))
+        assert state["900000000000000005"] == "0"
+        discovered = http(base + "/api/collections/discord_entities/records?" + urlencode({"filter": 'entity_id="900000000000000005"'}), headers=credentials)[1]["items"]
+        assert discovered[0]["name"] == "proof-new-thread" and discovered[0]["parent_id"] == PARENT2
+        log("PASS next guild poll re-walks and discovers a new thread; named channel works; inserted=0")
+        lookup_proof = command("docker", "exec", app, "python3", "/tests/container_probe.py", "entity-pages")
+        assert lookup_proof == "PASS 502 entities: chunked upsert; later-page exact/ambiguous/Unicode/missing lookup"
+        log(lookup_proof)
 
         # Edit updates content without erasing server-owned routing/creation fields.
         item = original[0]

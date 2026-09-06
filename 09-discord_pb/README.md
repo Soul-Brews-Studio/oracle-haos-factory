@@ -14,13 +14,19 @@ not cause fallback to another service’s secrets.
 - `bot_token` (`password?`): no default, read only from `/data/options.json`.
   No password-manager, source-repo, environment or filesystem-token fallback.
   Missing token leaves backfill idle; PocketBase still starts.
-- `channels`: comma-separated **channel AND thread IDs** to walk. No guild or
-  archived-thread auto-discovery. Values may be IDs or exact names already in
-  `discord_entities`; exact case wins, then case-insensitive exact matching.
-  Missing or ambiguous names fail with candidate names and IDs.
-- `guilds`: comma-separated guild IDs or exact names. Every poll refreshes the
-  guild, its channels, active threads, and paginated public archived threads,
-  upserts `discord_entities`, then walks every discovered text channel/thread.
+- `channels`: comma-separated channel/thread IDs or names. Names come from
+  `discord_entities`, including entities discovered by `guilds` in the same poll.
+  Exact case wins, then Unicode case-insensitive exact matching across all pages.
+  Missing or ambiguous names fail with candidate names and IDs. With no `guilds`,
+  unknown channel names need one initial ID-based run to populate the index.
+- `guilds`: comma-separated guild IDs or names. Names bootstrap from the bot's
+  paginated guild list. Every poll refreshes guilds, channels, active threads,
+  and paginated archives. Public archives cover text/announcement/forum/media
+  parents; private archives cover text parents, falling back to joined private
+  threads when MANAGE_THREADS is unavailable. Only channels the bot can access
+  can be archived; permission errors fail explicitly rather than claim parity.
+  Forum/media containers are indexed but only their threads carry messages.
+  Guild selection walks the entire selected guild, not only named `channels`.
 - `poll_minutes`: 1–10080; default 60. Runs are serialized, not overlapping.
 - `admin_email` + `admin_password`: optional pair for manual admin access.
   Runtime bootstrap never puts passwords in argv or emits first-run token URLs.
@@ -38,7 +44,7 @@ not cause fallback to another service’s secrets.
 
 Port 8110 is **not published by default** (`ports: 8110/tcp: null`). If explicitly
 published later, collection content still requires PocketBase superuser auth.
-`/api/discord/status` intentionally exposes only totals and channel IDs, never
+`/api/discord/status` intentionally exposes only totals and channel names/IDs, never
 message content. `/api/discord/internal/upsert` requires both loopback peer and
 an ephemeral process-only credential. No other add-on or database is accessed.
 
@@ -187,3 +193,40 @@ endpoint is exposed. `GET /api/discord/backfill` shows job/configuration state;
 `POST /api/discord/backfill` queues the configured worker (superusers only).
 Repeated requests coalesce and never run concurrent workers. Without a bot token
 and targets, it returns 409 and the panel explains which options are missing.
+
+## Reverse aliases: names → exact IDs (v0.1.6)
+
+Migration `1788667200_002_discord_entities.js` creates the requested reverse
+index. PocketBase uses timestamp-prefixed migration filenames. Correction
+`1788669000_003_entity_parent_hierarchy.js` repairs existing channel parents:
+**thread → channel → guild**. Discord category membership stays in `raw`.
+Optional PocketBase text fields return empty strings rather than JSON null.
+No `discord_messages` schema or denormalized name columns were added.
+
+The name index is refreshed on each poll, chunked at 500 entities per request.
+Name resolution scans all paginated kind records to avoid silently overlooking
+ambiguity after page one; Unicode casefold is done in Python, not SQLite LOWER.
+
+Example using names (guild list must be visible to the configured bot):
+
+```json
+{
+  "channels": "arra-01,mawjs-oracle",
+  "guilds": "Soul Brews - Brewing for Life",
+  "poll_minutes": 60,
+  "auto_login": false,
+  "auto_login_ha_admins": false,
+  "auto_login_ha_user_ids": ""
+}
+```
+
+Supply `bot_token` securely through Supervisor options; the JSON above omits
+credentials. Preserve any existing option values when applying this example.
+If a channel belongs to another guild, select that guild too or seed its ID.
+
+Reference behavior was read from maw-atlas `lib/download-guild.ts`,
+`lib/download-target.ts`, and `lib/discord-threads.ts` (no source copied).
+[Discord guild endpoints](https://docs.discord.com/developers/resources/guild),
+[channel archive endpoints](https://docs.discord.com/developers/resources/channel),
+and [thread types](https://docs.discord.com/developers/topics/threads) confirm
+container types and the timestamp versus joined-private snowflake cursors.

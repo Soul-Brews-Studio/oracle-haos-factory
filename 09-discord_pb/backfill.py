@@ -99,8 +99,9 @@ def entity(metadata, kind=None, archived=None):
     eid = snowflake(metadata.get("id"), "entity.id")
     dtype = int(metadata.get("type", -1))
     if kind is None: kind = "thread" if dtype in THREAD_TYPES else "channel"
-    parent = metadata.get("parent_id")
     guild = metadata.get("guild_id") or (eid if kind == "guild" else None)
+    # Alias hierarchy is thread -> channel -> guild. Discord categories stay in raw.
+    parent = metadata.get("parent_id") if kind == "thread" else guild if kind == "channel" else None
     return {"entity_id": eid, "kind": kind, "name": metadata.get("name") or eid,
             "parent_id": snowflake(parent, "entity.parent_id") if parent else None,
             "guild_id": snowflake(guild, "entity.guild_id") if guild else None,
@@ -108,17 +109,25 @@ def entity(metadata, kind=None, archived=None):
             "raw": metadata, "seen_at": datetime.now(timezone.utc).isoformat()}
 
 def post_entities(items):
-    if not items: return
-    result = pb_post("/api/discord/internal/entities", {"entities": items})
-    if result.get("ok") is not True or result.get("received") != len(items):
-        raise RuntimeError("PocketBase entity upsert failed")
+    for offset in range(0, len(items), 500):
+        batch = items[offset:offset + 500]
+        result = pb_post("/api/discord/internal/entities", {"entities": batch})
+        if result.get("ok") is not True or result.get("received") != len(batch):
+            raise RuntimeError("PocketBase entity upsert failed")
 
 def resolve_name(name, kind):
     kinds = [kind] if kind != "channel" else ["channel", "thread"]
     matches = []
     for candidate_kind in kinds:
-        result = pb_post("/api/discord/internal/resolve", {"name": name, "kind": candidate_kind})
-        matches.extend(result.get("matches", []))
+        offset = 0
+        while True:
+            result = pb_post("/api/discord/internal/resolve", {"name": name, "kind": candidate_kind, "offset": offset})
+            matches.extend(result.get("matches", []))
+            if not result.get("has_more"): break
+            next_offset = result.get("next_offset")
+            if type(next_offset) is not int or next_offset <= offset:
+                raise RuntimeError("PocketBase entity pagination did not advance")
+            offset = next_offset
     matches = [row for row in matches if str(row.get("name", "")).casefold() == name.casefold()]
     exact = [row for row in matches if row.get("name") == name]
     chosen = exact or matches
@@ -130,27 +139,48 @@ def resolve_name(name, kind):
 def resolve_targets(values, kind):
     return [value if SNOWFLAKE_RE.fullmatch(value) else resolve_name(value, kind) for value in values]
 
+def list_archived(route, headers, joined=False):
+    result = []
+    before = None
+    seen = set()
+    while True:
+        query = {"limit": 100}
+        if before: query["before"] = before
+        page = request_json(API + route + "?" + urlencode(query), headers)
+        batch = page.get("threads", [])
+        result.extend(batch)
+        if not page.get("has_more"): return result
+        last = batch[-1] if batch else {}
+        before = last.get("id") if joined else last.get("thread_metadata", {}).get("archive_timestamp")
+        if not before or before in seen:
+            raise RuntimeError("Discord archived thread pagination did not advance")
+        seen.add(before)
+
 def discover_guild(guild_id, token):
     headers = discord_headers(token)
     guild = request_json(API + f"/guilds/{guild_id}", headers)
     guild["guild_id"] = guild_id; guild["type"] = -1
     channels = request_json(API + f"/guilds/{guild_id}/channels", headers)
     active = request_json(API + f"/guilds/{guild_id}/threads/active", headers).get("threads", [])
-    threads = list(active)
+    channels = [dict(row, guild_id=guild_id) for row in channels]
+    threads = [dict(row, guild_id=guild_id) for row in active]
     for channel in channels:
-        if channel.get("type") != 0: continue
-        before = None
-        while True:
-            path = f"/channels/{channel['id']}/threads/archived/public?limit=100"
-            if before: path += "&before=" + before
-            page = request_json(API + path, headers)
-            batch = page.get("threads", [])
-            threads.extend(batch)
-            if not page.get("has_more") or not batch: break
-            before = batch[-1].get("thread_metadata", {}).get("archive_timestamp")
-            if not before: break
+        dtype = channel.get("type")
+        if dtype not in {0, 5, 15, 16}: continue
+        paths = [(f"/channels/{channel['id']}/threads/archived/public", False)]
+        if dtype == 0:
+            paths.append((f"/channels/{channel['id']}/threads/archived/private", False))
+        for route, joined in paths:
+            try:
+                archived = list_archived(route, headers, joined)
+            except HTTPError as error:
+                if error.code != 403 or not route.endswith("/private"): raise
+                # Without MANAGE_THREADS, only joined private archives are visible.
+                archived = list_archived(f"/channels/{channel['id']}/users/@me/threads/archived/private", headers, True)
+            threads.extend(dict(row, guild_id=guild_id) for row in archived)
+    threads = list({row["id"]: row for row in threads}.values())
     post_entities([entity(guild, "guild")] + [entity(row) for row in channels + threads])
-    return [row["id"] for row in channels + threads if row.get("type") in ({0} | THREAD_TYPES)]
+    return [row["id"] for row in channels + threads if row.get("type") in ({0, 5} | THREAD_TYPES)]
 
 def post_batch(messages):
     body = json.dumps({"messages": messages}).encode()
@@ -261,13 +291,21 @@ def main():
     if not (channel_values or guild_values) or (not token and not fixture_mode_enabled()):
         print("discord_pb: bot_token/channels/guilds absent; PocketBase stays available and backfill is idle", flush=True); return 0
     if any(not SNOWFLAKE_RE.fullmatch(value) for value in guild_values):
-        available = request_json(API + "/users/@me/guilds", discord_headers(token))
-        post_entities([entity(dict(row, type=-1, guild_id=row["id"]), "guild") for row in available])
-    channels = resolve_targets(channel_values, "channel") + resolve_targets(guild_values, "guild")
-    guild_ids = channels[len(channel_values):]
-    channels = channels[:len(channel_values)]
-    for guild_id in guild_ids: channels.extend(discover_guild(guild_id, token))
-    channels = list(dict.fromkeys(channels))
+        after = None
+        while True:
+            query = {"limit": 200}
+            if after: query["after"] = after
+            available = request_json(API + "/users/@me/guilds?" + urlencode(query), discord_headers(token))
+            post_entities([entity(dict(row, type=-1, guild_id=row["id"]), "guild") for row in available])
+            if len(available) < 200: break
+            next_after = max((snowflake(row["id"], "guild.id") for row in available), key=int)
+            if after and int(next_after) <= int(after): raise RuntimeError("Discord guild pagination did not advance")
+            after = next_after
+    guild_ids = resolve_targets(guild_values, "guild")
+    discovered = []
+    for guild_id in guild_ids: discovered.extend(discover_guild(guild_id, token))
+    # A first poll can now resolve channel names discovered by its guild option.
+    channels = list(dict.fromkeys(resolve_targets(channel_values, "channel") + discovered))
     inserted = updated = 0; failures = []
     try:
         with state_lock(STATE_FILE):

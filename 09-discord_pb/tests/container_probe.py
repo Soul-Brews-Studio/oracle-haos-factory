@@ -46,7 +46,23 @@ if __name__ == "__main__":
         env = os.environ.copy()
         env.update(DISCORD_PB_INTERNAL_TOKEN=pb_environment()["DISCORD_PB_INTERNAL_TOKEN"],
                    DISCORD_PB_FIXTURE="true", DISCORD_BOT_TOKEN="", DISCORD_API_BASE=sys.argv[2],
-                   DISCORD_CHANNELS="", DISCORD_GUILDS=sys.argv[3])
+                   DISCORD_CHANNELS=sys.argv[4] if len(sys.argv) > 4 else "", DISCORD_GUILDS=sys.argv[3])
         sys.exit(subprocess.run([sys.executable, "/app/backfill.py"], env=env, timeout=90).returncode)
+    if sys.argv[1] == "entity-pages":
+        sys.path.insert(0, "/app")
+        import backfill
+        os.environ["DISCORD_PB_INTERNAL_TOKEN"] = pb_environment()["DISCORD_PB_INTERNAL_TOKEN"]
+        items = [backfill.entity({"id": str(800000000000000000 + i), "name": f"alias-{i}", "type": 0}) for i in range(502)]
+        items[0]["name"] = "Paged"
+        items[500]["name"] = "paged"
+        items[501]["name"] = "Straße"
+        backfill.post_entities(items)
+        assert backfill.resolve_name("paged", "channel") == items[500]["entity_id"]
+        assert backfill.resolve_name("STRASSE", "channel") == items[501]["entity_id"]
+        for name, expected in (("PAGED", "ambiguous"), ("missing-name", "not found")):
+            try: backfill.resolve_name(name, "channel")
+            except ValueError as error: assert expected in str(error)
+            else: raise AssertionError("lookup should fail")
+        print("PASS 502 entities: chunked upsert; later-page exact/ambiguous/Unicode/missing lookup")
     if sys.argv[1] == "upsert":
         print(json.dumps(upsert(json.loads(sys.stdin.read()))))

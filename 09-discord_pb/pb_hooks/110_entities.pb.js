@@ -25,8 +25,13 @@ routerAdd("POST", "/api/discord/internal/resolve", (e) => {
   if (e.remoteIP() !== "127.0.0.1" || !$os.getenv("DISCORD_PB_INTERNAL_TOKEN") || e.request.header.get("X-Discord-PB-Token") !== $os.getenv("DISCORD_PB_INTERNAL_TOKEN")) return e.json(401, { ok: false, error: "unauthorized" })
   const name = String(e.requestInfo().body.name || "").trim()
   const kind = String(e.requestInfo().body.kind || "").trim()
-  const rows = $app.findRecordsByFilter("discord_entities", "name ~ {:name} && kind = {:kind}", "name,entity_id", 100, 0, { name, kind })
-  return e.json(200, { ok: true, matches: rows.map((r) => ({ entity_id: r.getString("entity_id"), kind: r.getString("kind"), name: r.getString("name"), parent_id: r.getString("parent_id"), guild_id: r.getString("guild_id") })) })
+  const offset = e.requestInfo().body.offset || 0
+  if (!name || ["guild", "channel", "thread"].indexOf(kind) < 0 || !Number.isSafeInteger(offset) || offset < 0) return e.json(400, { ok: false, error: "invalid entity lookup" })
+  // Python performs Unicode casefold/exact preference across every page. SQL's
+  // substring + LIMIT could miss exact names or hide an ambiguous candidate.
+  const rows = $app.findRecordsByFilter("discord_entities", "kind = {:kind}", "entity_id", 500, offset, { kind })
+  return e.json(200, { ok: true, has_more: rows.length === 500, next_offset: offset + rows.length,
+    matches: rows.map((r) => ({ entity_id: r.getString("entity_id"), kind: r.getString("kind"), name: r.getString("name"), parent_id: r.getString("parent_id"), guild_id: r.getString("guild_id") })) })
 })
 
 routerAdd("GET", "/api/discord/entities/{name}", (e) => {

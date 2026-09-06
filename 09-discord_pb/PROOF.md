@@ -4,10 +4,12 @@
 
 The fixture now exposes one guild with two text channels and one thread. The
 local proof resolves the guild by `Proof Guild`, exercises guild/channel/active
-thread/archived-thread discovery, and proves the resulting private
+thread discovery, and proves the resulting private
 `discord_entities` records retain names plus exact IDs. Unit coverage includes
 exact-case preference, case-insensitive matching, ambiguity, and missing-name
-failures. `discord_messages` was not changed.
+failures. `discord_messages` was not changed. The v0.1.3 archive response was
+empty and did not prove archived-only or next-poll discovery; the v0.1.6 audit
+below supplies that missing evidence.
 
 ## Sidebar auto-login follow-up — v0.1.2
 
@@ -177,8 +179,9 @@ refresh and accessed private records without touching either sentinel.
 
 ## Remaining limits / stop boundary
 
-No live Discord access or Supervisor install. Parent/thread IDs must be explicit;
-no auto-discovery. Incremental scans do not capture old-message edits/deletions.
+The initial proof did not include live Discord access or Supervisor installation.
+Its explicit-ID-only limit is superseded by the v0.1.6 guild/thread discovery
+proof below. Incremental scans do not capture old-message edits/deletions.
 Count parity can legitimately differ when Discord permissions/history change;
 `verify.sh` fails rather than claiming completeness. The actual HA ingress peer
 and allowlisted user IDs must be validated at the future authorized install.
@@ -226,3 +229,54 @@ HTML/JS/CSS and status returned 200. Guest import and backfill POSTs returned
 Supervisor's reported ingress_url exposed a doubled slash: it joins its ingress
 base with ingress_entry itself. v0.1.5 changes the entry to relative
 `panel.html`, avoiding a prefix-losing redirect. No message schema change.
+
+## Names→IDs acceptance audit — v0.1.6
+
+`95383d6` contained the initial implementation, but was not complete against the
+full requirement. This audit repaired:
+- channel alias parents pointing at categories instead of guilds (migration003
+  repairs existing rows; source category metadata remains in raw);
+- >500-entity discovery batches, >100-candidate/Unicode name resolution, and
+  unpaginated guild-name bootstrap;
+- named channels resolving before their selected guild had been discovered;
+- announcement/forum/media archive parents and private archive discovery;
+- unescaped/repeated archive cursors and weak archived/next-poll proof.
+
+Fresh output (PocketBase 0.29.3, ARM64 image, local fixtures only):
+
+```text
+Ran 40 tests
+OK
+PASS named guild: 2 channels + 1 archived thread; channel→guild/thread→channel hierarchy
+PASS next guild poll re-walks and discovers a new thread; named channel works; inserted=0
+PASS 502 entities: chunked upsert; later-page exact/ambiguous/Unicode/missing lookup
+PASS restart persists 214 fixture rows; post-restart replay inserted=0
+PASS source DB/WAL/SHM SHA256 unchanged
+LOCAL PROOF PASS
+PANEL PROOF PASS
+```
+
+[Full fixture output](evidence/entities-v0.1.6.txt).
+`just verify` passed unit tests, shell syntax, shellcheck and diff checks.
+Existing browser admin proof passed auth-refresh/protected records 200 with
+214 rows and unrelated storage sentinels unchanged. Panel proof returned 5
+name matches, 20 visible messages, and an idempotent fixture import. Tests also
+cover archive timestamp/ID cursor pagination, repeated-cursor failure, supported
+container types, private-archive permission fallback, guild-list pagination, and
+repairing legacy category parents without changing message rows or raw metadata.
+No changes to `discord_messages` schema. No rsync, live options change, or
+restart was performed during this acceptance audit.
+
+Operator commands after reviewing the commit (do not copy over another add-on):
+
+```sh
+SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+rsync -az --exclude proof-local/ --exclude __pycache__/ "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
+ssh kvmlab1.oracle.netbird 'ha store reload && ha apps update local_discord_pb && ha apps restart local_discord_pb'
+```
+
+The update rebuilds the image so migrations/hooks are included; a restart alone
+after rsync does not replace the embedded code. Commands leave options intact.
+Use the names-based options example in README, preserving credentials and
+existing values. Live Discord parity remains a separate credential/target and
+operator-run verification gate, not a claim made by the local fixture.
