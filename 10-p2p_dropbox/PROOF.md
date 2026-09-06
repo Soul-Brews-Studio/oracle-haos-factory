@@ -1,5 +1,21 @@
 # Local proof — P2P Dropbox
 
+## Current follow-up: 0.1.1 auto-login deployment
+
+Implementation `6b7dfd41fd1d65f9581a3002814c695838151850` was pushed, then deployed
+with explicit lead approval to only `local_p2p_dropbox` on kvmlab1. Fresh local
+48-test / dual-arch build / CLI hash / browser-harness evidence is in
+[evidence/autologin](evidence/autologin/README.md). Actual update/restart, state,
+auth gates, preserved options and file-hash results are recorded in
+[deployment.txt](evidence/autologin/deployment.txt). All original data remains;
+a concurrent lab03 transfer accounts for the count rising from 10 to 11 entries.
+
+The real HA browser recheck is a stated gap: the user took browser control, and
+SSH/Core proxy ingress-session creation was denied. No protection mode, unrelated
+add-on, deployment key or existing options were changed to work around it.
+The earlier stop-before-install statements below describe the original phase,
+not the later explicitly authorized deployment.
+
 ## Follow-up: Supervisor-compatible image tags (2026-09-06)
 
 After the lead reported Supervisor falling back to `base:latest`, build.yaml and

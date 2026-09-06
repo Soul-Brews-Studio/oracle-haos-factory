@@ -4,7 +4,13 @@ Self-contained Bun 1.3.14 + Hono HTTP/WS server, werift receiver and vendored
 React UI. Two s6 services, one published TCP port (3847), no Cloudflare runtime.
 New directory `10-p2p_dropbox`, slug `p2p_dropbox`; existing add-ons are untouched.
 
-**Lab status (lead-reported, 2026-09-06): installed on kvmlab1 as
+**Current status (2026-09-06): v0.1.1 deployed and started on kvmlab1.** Existing
+options/key and original shared files were preserved. Live direct API gates and
+Core admin lookup passed; local fake-ingress browser auto-connect passed. Nat's
+actual HA browser session is not yet rechecked (browser control paused).
+See [deployment evidence](evidence/autologin/deployment.txt).
+
+**Earlier transfer proof (lead-reported, 2026-09-06): installed on kvmlab1 as
 `local_p2p_dropbox` v0.1.0 and started.** The lead verified live ingress, the
 401/200 auth gate, and real m5 HTTP (1.5 MB) and CLI WebRTC (2.5 MB) transfers
 with matching SHA-256 at both ends and a receiver ledger entry. These deployment

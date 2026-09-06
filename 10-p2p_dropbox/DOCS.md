@@ -57,3 +57,32 @@ After shipping an update, run `ha store reload`, then
 `/share/p2p`. GET `/addons/local_p2p_dropbox/options` returned 405 on this
 Supervisor; read `.data.options` from GET `/addons/local_p2p_dropbox/info` instead,
 keeping output private. Never print the options/key in deployment logs.
+
+### Exact shipping/update sequence used for 0.1.1
+
+From the factory worktree (after commit/push), only tracked add-on source is sent:
+
+```sh
+git archive HEAD:10-p2p_dropbox | ssh kvmlab1.oracle.netbird '
+  set -eu
+  umask 077
+  D=$(mktemp -d /tmp/p2p-source.XXXXXX)
+  tar -xf - -C "$D"
+  rsync -a --delete "$D/" /addons/p2p_dropbox/
+  ha store reload
+  ha addons update local_p2p_dropbox
+  ha addons restart local_p2p_dropbox
+'
+```
+
+`--delete` is confined to this managed source directory, never `/share` or `/data`.
+Take a private source/options/file-hash snapshot first, as done for this delivery.
+For a same-version image change use `ha addons rebuild local_p2p_dropbox` instead
+of update. Avoid printing unfiltered `ha addons info` output: it contains options.
+
+The 0.1.1 deployment preserved every pre-existing option. All nine original data
+files retain their hashes; the original ledger bytes remain an exact prefix.
+A concurrent lab03 transfer added a tenth data file and 302 ledger bytes during
+the update, so the share now has **11 entries**, not the initial 10. Nothing was
+removed to force the old count. See `evidence/autologin/deployment.txt` for outputs
+and the explicit real-HA-browser validation gap.
