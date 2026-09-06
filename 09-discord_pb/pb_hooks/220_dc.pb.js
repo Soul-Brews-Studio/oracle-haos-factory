@@ -14,13 +14,17 @@ routerAdd("GET", "/api/dc/channels", (e) => {
     const selected = helper.selectedMap($app), guildNames = {}
     for (const row of guilds) guildNames[row.entity_id] = row.name
     const visible = guild ? rows.filter((row) => row.guild_id === guild.entity_id) : rows
-    const counts = arrayOf(new DynamicModel({ entity_id: "", count: 0 }))
-    $app.db().newQuery("SELECT e.entity_id, COUNT(m.id) count FROM discord_entities e LEFT JOIN discord_messages m ON (e.kind='thread' AND m.thread_id=e.entity_id) OR (e.kind='channel' AND m.channel_id=e.entity_id AND COALESCE(m.thread_id,'')='') WHERE e.kind!='guild' GROUP BY e.entity_id").all(counts)
-    const countById = {}; for (const row of counts) countById[row.entity_id] = row.count
+    const counts = arrayOf(new DynamicModel({ entity_id: "", count: 0, first_message_at: "", last_message_at: "", last_import_at: "" }))
+    $app.db().newQuery("SELECT e.entity_id, COUNT(m.id) count, COALESCE(MIN(m.ts),'') first_message_at, COALESCE(MAX(m.ts),'') last_message_at, COALESCE(json_extract(s.value,'$.at'),'') last_import_at FROM discord_entities e LEFT JOIN discord_messages m ON (e.kind='thread' AND m.thread_id=e.entity_id) OR (e.kind='channel' AND m.channel_id=e.entity_id AND COALESCE(m.thread_id,'')='') LEFT JOIN dc_settings s ON s.key='import:' || e.entity_id WHERE e.kind!='guild' GROUP BY e.entity_id").all(counts)
+    const countById = {}, activityById = {}; for (const row of counts) { countById[row.entity_id] = row.count; activityById[row.entity_id] = row }
+    const iso = (value) => value ? new Date(String(value).replace(" ", "T")).toISOString() : null
     return e.json(200, visible.map((row) => {
       const policy = model.exists && model.channels ? model.channels[row.entity_id] : null
+      const activity = activityById[row.entity_id] || {}
       return { id: row.entity_id, name: row.name, guild: guildNames[row.guild_id] || row.guild_id, guild_id: row.guild_id, kind: row.kind,
         parent: row.parent_id || null, archived: row.archived, imported_count: countById[row.entity_id] || 0,
+        first_message_at: iso(activity.first_message_at), last_message_at: iso(activity.last_message_at),
+        last_import_at: iso(activity.last_import_at),
         discord_type: row.discord_type, importable: helper.IMPORTABLE_TYPES.indexOf(row.discord_type) >= 0,
         selected: model.exists ? !!(policy && policy.import) : !!selected[row.entity_id], purpose: policy ? policy.purpose : null,
         owner: policy ? policy.owner : null, post: policy ? !!policy.post : false, actions: policy ? policy.actions || [] : [] }

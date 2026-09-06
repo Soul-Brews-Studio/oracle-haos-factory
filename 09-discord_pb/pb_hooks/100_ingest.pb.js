@@ -11,7 +11,7 @@ routerAdd("POST", "/api/discord/internal/upsert", (e) => {
   const error = ingest.validateEnvelope(body)
   if (error) return e.json(400, { ok: false, error })
 
-  const result = ingest.upsertMessages($app, body.messages)
+  const result = ingest.upsertMessages($app, body.messages, require(__hooks + "/lib/import_activity.js").markImports)
   return e.json(200, { ok: true, inserted: result.inserted, updated: result.updated, received: body.messages.length })
 })
 
@@ -21,6 +21,6 @@ routerAdd("POST", "/api/discord/import", (e) => {
   const error = ingest.validateEnvelope(body)
   if (error) return e.json(400, { ok: false, error })
 
-  const result = ingest.upsertMessages($app, body.messages)
+  const result = ingest.upsertMessages($app, body.messages, require(__hooks + "/lib/import_activity.js").markImports)
   return e.json(200, { ok: true, inserted: result.inserted, updated: result.updated, received: body.messages.length })
 }, $apis.requireSuperuserAuth())

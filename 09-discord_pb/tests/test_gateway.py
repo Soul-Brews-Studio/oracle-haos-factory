@@ -78,8 +78,10 @@ class GatewayTests(unittest.TestCase):
             send_frame(stream, 8, struct.pack("!H", 4000))
 
         seen = set()
+        connections = []
         def post(path, payload):
             self.assertEqual(path, "/api/discord/internal/live")
+            connections.append(listener._status()["connected_since"])
             key = payload["data"]["id"]
             if key == "not-selected": return {"ok": True, "stored": 0, "ignored": 1}
             if (payload["event"], key, payload["data"].get("content")) in seen:
@@ -104,6 +106,9 @@ class GatewayTests(unittest.TestCase):
                 self.assertEqual(status["stored"], 2)
                 self.assertEqual(status["ignored"], 3)  # duplicate, gated, RESUMED
                 self.assertEqual(listener.sequence, 6)
+                self.assertIsNone(status["connected_since"])  # disconnected after the fixture
+                self.assertTrue(all(isinstance(at, float) for at in connections))
+                self.assertGreater(connections[-1], connections[0])  # RESUMED starts a new connection age
                 self.assertTrue((Path(folder) / "gap").exists())
                 self.assertTrue(any(row.get("op") == 1 for row in server.received))
                 self.assertFalse(server.errors)

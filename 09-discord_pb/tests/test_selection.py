@@ -61,8 +61,9 @@ class SelectedPollingTests(unittest.TestCase):
         self.assertEqual(self.fills, [T])
         self.assertEqual(self.discovered, 0)
         self.assertIn(("/api/discord/internal/import-ack", {"entity_id": T, "request_id": "r1"}), self.calls)
+        self.assertIn(("/api/discord/internal/import-complete", {"entity_id": T}), self.calls)
 
     def test_failed_import_keeps_request_for_retry(self):
         result = self.run_poll({"initialized": True, "selected": [], "requests": [{"entity_id": T, "request_id": "r1"}]}, requested=True, failure=True)
         self.assertEqual(result, 1)
-        self.assertFalse(any(path.endswith("import-ack") for path, _ in self.calls))
+        self.assertFalse(any(path.endswith("import-ack") or path.endswith("import-complete") for path, _ in self.calls))

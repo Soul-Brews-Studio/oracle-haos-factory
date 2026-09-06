@@ -145,17 +145,20 @@ function writeMessage(tx, collection, item, found) {
   return true
 }
 
-function upsertMessages(app, messages) {
+function upsertMessages(app, messages, markImports) {
   let inserted = 0, updated = 0
   app.runInTransaction((tx) => {
     const collection = tx.findCollectionByNameOrId("discord_messages")
+    const targets = {}
     for (const item of messages) {
+      targets[item.thread_id || item.channel_id] = true
       const found = tx.findRecordsByFilter("discord_messages", "message_id = {:id}", "", 1, 0, { id: item.message_id })
       writeMessage(tx, collection, item, found)
       // Replays/stale rows are acknowledged as existing, not new inserts.
       if (found.length) updated++
       else inserted++
     }
+    if (markImports) markImports(tx, targets)
   })
   return { inserted, updated }
 }

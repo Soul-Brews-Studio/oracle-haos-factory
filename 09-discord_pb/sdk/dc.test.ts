@@ -8,15 +8,17 @@ describe("dc sdk", () => {
     const dc = createDC({baseUrl: "http://pb/", token: "session-token", transport(request) {
       seen.push(request);
       if (request.url.includes("/read")) return {messages: [{message_id: "1"}]};
+      if (request.url.includes("/timeline")) return {buckets: [{date: "2026-09-06", count: 1}]};
       if (request.url.endsWith("/channels")) return {channels: [{id: "2"}]};
       return {ok: true};
     }});
     expect(dc.channel("general chat").read({limit: 5, since: "2026-09-06T00:00:00Z"})).toEqual([{message_id: "1"}]);
     expect(dc.channels()).toEqual([{id: "2"}]);
+    expect(dc.channel("general chat").timeline({bucket: "hour"})).toEqual({buckets: [{date: "2026-09-06", count: 1}]});
     expect(dc.channel("general chat").post("hello")).toEqual({ok: true});
     expect(seen[0].url).toContain("/api/dc/channels/general%20chat/read?");
     expect(seen[0].headers.Authorization).toBe("session-token");
-    expect(seen[2].body).toBe('{"text":"hello"}');
+    expect(seen[3].body).toBe('{"text":"hello"}');
   });
 
   test("reads declared config and allowed action decisions", async () => {
@@ -36,10 +38,12 @@ describe("dc sdk", () => {
 
   test("promise transport and guild list preserve the same API", async () => {
     const dc = createDC({baseUrl: "http://pb", token: "token", transport: async request => {
+      if (request.url.includes("/timeline")) return {buckets: [], target: {kind: "guild"}};
       expect(request.url).toEndWith("/api/dc/channels?guild=Soul%20Brews");
       return [{id: "9", name: "general"}];
     }});
     expect(await dc.guild("Soul Brews").channels()).toEqual([{id: "9", name: "general"}]);
+    expect(await dc.guild("Soul Brews").timeline()).toEqual({buckets: [], target: {kind: "guild"}});
   });
 
   test("validates write arguments before transport", () => {
@@ -47,6 +51,7 @@ describe("dc sdk", () => {
     expect(() => dc.channel("general").post("  ")).toThrow("non-empty text");
     expect(() => dc.channel("general").action.thread("", "starter")).toThrow("requires a name");
     expect(() => dc.channel("")).toThrow("requires a channel ID or name");
+    expect(() => dc.channel("general").timeline({bucket: "week" as never})).toThrow("day or hour");
   });
 });
 
@@ -145,14 +150,19 @@ describe("cli", () => {
     expect(parseCLI(["config"])).toEqual({kind: "config", action: "get"});
     expect(parseCLI(["config", "download"])).toEqual({kind: "config", action: "download"});
     expect(parseCLI(["channel", "general", "tail"])).toEqual({kind: "channel", channel: "general", action: "tail", args: [], read: {}});
+    expect(parseCLI(["channel", "general", "timeline", "--bucket", "hour"])).toEqual({kind: "channel", channel: "general", action: "timeline", args: [], read: {}, timeline: {bucket: "hour"}});
   });
 
   test("dispatches channel actions without exposing credentials", async () => {
     const calls: TransportRequest[] = [];
-    const client = createDC({baseUrl: "http://pb", token: "secret", transport: async request => { calls.push(request); return {ok: true}; }});
+    const client = createDC({baseUrl: "http://pb", token: "secret", transport: async request => {
+      calls.push(request); return request.url.includes("/timeline") ? {ok: true, buckets: []} : {ok: true};
+    }});
     await run(parseCLI(["channel", "general", "thread", "News", "First post"]), client);
     expect(calls[0].url).toEndWith("/channels/general/thread");
     expect(calls[0].body).toBe('{"name":"News","starter":"First post"}');
+    await run(parseCLI(["channel", "general", "timeline", "--bucket", "day"]), client);
+    expect(calls[1].url).toEndWith("/channels/general/timeline?bucket=day");
   });
 
   test("CLI config download uses the raw YAML endpoint", async () => {

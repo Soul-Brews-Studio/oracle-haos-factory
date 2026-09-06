@@ -4,6 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Discord Archive</title>
   <link rel="stylesheet" href="./panel.css">
+  <script src="./time.js" defer></script>
   <script src="./panel.js" defer></script>
 </head>
 <body>
@@ -30,8 +31,18 @@
         <label for="channel-filter">Channel or thread ID</label>
         <div class="input-row"><input id="channel-filter" inputmode="numeric" pattern="[0-9]{17,20}" placeholder="All channels"><button id="filter-button" disabled>Filter</button></div>
       </form>
+      <section class="time-tools" aria-labelledby="timeline-title">
+        <div class="timeline-heading"><div><h3 id="timeline-title">Message timeline</h3><p id="timeline-range" class="hint">Choose a channel or guild to see its imported range.</p></div>
+          <div class="timeline-controls"><label>View <select id="timeline-target" disabled><option value="">Choose a target</option></select></label><label>Bucket <select id="timeline-bucket" disabled><option value="day">Day</option><option value="hour">Hour</option></select></label></div>
+        </div>
+        <div id="timeline-strip" class="timeline-strip" role="list" aria-label="Message activity histogram"></div>
+        <div class="timeline-pages"><button id="timeline-older" class="secondary" type="button" disabled>Older</button><span id="timeline-window" class="hint"></span><button id="timeline-newer" class="secondary" type="button" disabled>Newer</button></div>
+        <p id="timeline-gaps" class="hint"></p>
+        <form id="jump-date" class="jump-date"><label for="jump-date-input">Jump to date</label><div class="input-row"><input id="jump-date-input" type="date"><button id="jump-date-button" type="submit" disabled>Jump</button></div></form>
+      </section>
       <p id="message-status" role="status">Sign in through Home Assistant to read private messages.</p>
-      <p id="live-status" class="hint" role="status" aria-live="polite">Live updates are disconnected.</p>
+      <p id="live-status" class="hint" role="status" aria-live="polite">Panel updates are disconnected.</p>
+      <p id="gateway-status" class="hint" role="status" aria-live="polite">Discord Gateway status unavailable.</p>
       <ol id="messages"></ol>
       <div class="pagination"><button id="previous" disabled>Previous</button><button id="next" disabled>Next</button></div>
     </section>
@@ -71,7 +82,7 @@
     </aside>
   </div>
   <section id="model-view" class="model-view" role="tabpanel" aria-labelledby="model-tab" hidden>
-    <div class="section-heading"><div><h2 id="channels-title">Declared channel model</h2><p class="hint">Guild → channel → thread. Import changes immediately; posting and actions require an explicit row save.</p></div><button id="channels-refresh" class="secondary" type="button" disabled>Reload model</button></div>
+    <div class="section-heading"><div><h2 id="channels-title">Declared channel model</h2><p class="hint">Guild → channel → thread. Import changes immediately; posting and actions require an explicit row save.</p></div><div class="model-actions"><label for="channel-sort">Sort</label><select id="channel-sort"><option value="name">Name</option><option value="activity">Last activity</option></select><button id="channels-refresh" class="secondary" type="button" disabled>Reload model</button></div></div>
     <p id="channels-status" role="status" aria-live="polite">Sign in to view the model.</p>
     <div id="channel-list" class="channel-list"></div>
     <details class="yaml-editor"><summary>Raw dc.config.yaml</summary>

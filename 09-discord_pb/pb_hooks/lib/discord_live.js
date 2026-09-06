@@ -72,7 +72,10 @@ function status(value, now) {
   const timestamp = typeof value.updated_at === "number" ? value.updated_at : 0
   const fresh = now - timestamp >= 0 && now - timestamp < 20
   const last = typeof value.last_event_at === "number" ? value.last_event_at : null
-  return { connected: fresh && value.connected === true, enabled: value.enabled !== false,
+  const connected = fresh && value.connected === true
+  const since = typeof value.connected_since === "number" && value.connected_since > 0 && value.connected_since <= now
+    ? new Date(value.connected_since * 1000).toISOString() : null
+  return { connected, connected_since: connected ? since : null, enabled: value.enabled !== false,
     session_id: typeof value.session_id === "string" ? value.session_id : null,
     last_event_age: last === null ? null : Math.max(0, now - last),
     events_per_minute: (value.event_times || []).filter((t) => typeof t === "number" && t > now - 60 && t <= now).length,

@@ -10,6 +10,8 @@ import {createDC} from "./sdk/dc.ts";
 const dc = createDC({baseUrl: process.env.DC_URL!, token: process.env.DC_TOKEN!});
 const selected = await dc.channels();
 const recent = await dc.channel("general").read({limit: 20});
+const days = await dc.channel("general").timeline({bucket: "day"});
+const guildHours = await dc.guild("Soul Brews").timeline({bucket: "hour"});
 await dc.channel("general").import();
 const mayPost = await dc.channel("general").allowed("post");
 const declaredModel = await dc.config();
@@ -67,6 +69,7 @@ export DC_TOKEN='a-pocketbase-or-ingress-session-token'
 bun sdk/cli.ts channels
 bun sdk/cli.ts guild 'Soul Brews' channels
 bun sdk/cli.ts channel general read --limit 20
+bun sdk/cli.ts channel general timeline --bucket day
 bun sdk/cli.ts channel general tail
 bun sdk/cli.ts channel general import
 bun sdk/cli.ts channel announcements post 'hello'

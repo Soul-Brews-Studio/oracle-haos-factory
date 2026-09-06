@@ -24,6 +24,21 @@ export type ReadOptions = {
   before?: string;
 };
 
+export type TimelineOptions = {bucket?: "day" | "hour"};
+export type TimelineBucket = {start: string; date: string; label: string; count: number};
+export type TimelineGap = {since: string; before: string; days: number};
+export type Timeline = {
+  ok: true;
+  bucket: "day" | "hour";
+  time_zone: "Asia/Bangkok";
+  target: {id: string; name: string; kind: string};
+  first: string | null;
+  last: string | null;
+  total: number;
+  buckets: TimelineBucket[];
+  gaps: TimelineGap[];
+};
+
 export type ChannelInfo = {
   id: string;
   name: string;
@@ -33,6 +48,9 @@ export type ChannelInfo = {
   parent: string | null;
   archived: boolean;
   imported_count: number;
+  first_message_at?: string | null;
+  last_message_at?: string | null;
+  last_import_at?: string | null;
   selected: boolean;
   purpose?: string | null;
   owner?: string | null;
@@ -189,6 +207,17 @@ export function createDC(config: DCConfig) {
       read(options: ReadOptions = {}) {
         return map(request("GET", path + "/read" + query(options)), (data) => arrayFrom(data, "messages"));
       },
+      timeline(options: TimelineOptions = {}) {
+        if (options.bucket !== undefined && options.bucket !== "day" && options.bucket !== "hour") {
+          throw new Error("timeline bucket must be day or hour");
+        }
+        return map(request("GET", path + "/timeline" + query(options)), (data) => {
+          if (!data || typeof data !== "object" || !Array.isArray((data as JsonMap).buckets)) {
+            throw new Error("Discord channel API returned an invalid timeline response");
+          }
+          return data as Timeline;
+        });
+      },
       import() { return request("POST", path + "/import", {}); },
       stream(onMessage: (record: DiscordMessage, action: RealtimeAction) => void): StreamSubscription {
         if (typeof onMessage !== "function") throw new Error("stream(onMessage) requires a callback");
@@ -328,7 +357,21 @@ export function createDC(config: DCConfig) {
     },
     guild(x: string) {
       if (typeof x !== "string" || !x.trim()) throw new Error("guild(x) requires a guild ID or name");
-      return {channels: () => channels({guild: x.trim()})};
+      const guildPath = "/guilds/" + encodeURIComponent(x.trim());
+      return {
+        channels: () => channels({guild: x.trim()}),
+        timeline(options: TimelineOptions = {}) {
+          if (options.bucket !== undefined && options.bucket !== "day" && options.bucket !== "hour") {
+            throw new Error("timeline bucket must be day or hour");
+          }
+          return map(request("GET", guildPath + "/timeline" + query(options)), (data) => {
+            if (!data || typeof data !== "object" || !Array.isArray((data as JsonMap).buckets)) {
+              throw new Error("Discord channel API returned an invalid timeline response");
+            }
+            return data as Timeline;
+          });
+        },
+      };
     },
   };
 }

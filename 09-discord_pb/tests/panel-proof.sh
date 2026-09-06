@@ -13,7 +13,7 @@ if (!/^http:\/\/127\.0\.0\.1:\d+\/api\/hassio_ingress\/discord-proof\/$/.test(ru
 await useOrCreateTaskSpace('discord-pb local proof');
 
 await openOrReuseTab(run.url + 'panel.html', {wait:true,timeout:20});
-await waitForElement('#messages li', {timeout:20});
+await waitForElement('#messages .message-row', {timeout:20});
 const checks = await js(`(async()=>{
   const token=JSON.parse(localStorage.getItem('__dc_superuser_auth__')).token;
   const headers={Authorization:token,'Content-Type':'application/json'};
@@ -36,7 +36,7 @@ const checks = await js(`(async()=>{
   document.getElementById('entity-name').value='proof';
   document.getElementById('entity-find').requestSubmit();
   return {staysOnDashboard:location.pathname.endsWith('/panel.html'),
-    visibleMessages:document.querySelectorAll('#messages li').length,
+    visibleMessages:document.querySelectorAll('#messages .message-row').length,
     guestImportDenied:[401,403].includes(guest.status),jobStatus:job.status,
     jobConfigured:state.configured,jobState:state.state,queueStatus:queued.status,
     invalidBatchStatus:invalid.status,
@@ -126,12 +126,12 @@ const liveChecks=await js(`(async()=>{
     const response=await fetch('./api/discord/import',{method:'POST',headers,body:JSON.stringify({messages:[row]})});
     if(!response.ok)throw new Error('Panel realtime import failed: '+response.status);
   };
-  const matching=()=>[...document.querySelectorAll('#messages li')].filter(row=>row.dataset.messageId===messageId);
+  const matching=()=>[...document.querySelectorAll('#messages .message-row')].filter(row=>row.dataset.messageId===messageId);
   let result={liveCreate:false,liveUpdate:false,liveTombstone:false};
   try{
     await importRow('panel live create');
-    await waitFor(()=>document.querySelector('#messages li:first-child')?.dataset.messageId===messageId&&
-      document.querySelector('#messages li:first-child .message-content')?.textContent==='panel live create','create');
+    await waitFor(()=>document.querySelector('#messages .message-row')?.dataset.messageId===messageId&&
+      document.querySelector('#messages .message-row .message-content')?.textContent==='panel live create','create');
     result.liveCreate=true;
     await importRow('panel live update');
     await waitFor(()=>matching().length===1&&matching()[0].querySelector('.message-content')?.textContent==='panel live update','update dedupe');

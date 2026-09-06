@@ -1,3 +1,84 @@
+# v0.1.9 — Bangkok timestamps and archive timelines (2026-09-06)
+
+Scope: `09-discord_pb/` on `lab/01-discord-pb-kvmlab1`. **Local verification;
+STOP before deployment.** No kvmlab1 source, options, services, or tokens changed.
+
+```text
+Python: 83 tests OK
+DC API: 35 assertions PASS; live ingest: 41 assertions PASS
+Timeline: 16 assertions PASS; Bangkok time helpers PASS; import activity: 6 PASS
+Bun SDK/CLI: 12 pass, 0 fail, 42 expects
+Strict TypeScript, JS syntax, Python compile, ShellCheck, diff checks: PASS
+Docker linux/arm64 + linux/amd64: PASS (PocketBase 0.29.3)
+LOCAL PROOF PASS
+TIMELINE PROBE PASS (SQL Bangkok midnight/leap-day buckets; gaps; create/import separation; channel/thread/guild totals)
+PANEL PROOF PASS
+TIMELINE PANEL PROOF PASS
+```
+
+[Unit/static output](evidence/dc-v0.1.9-verification.txt),
+[container/Gateway/SQL proof](evidence/dc-v0.1.9-local.txt),
+[admin isolation](evidence/dc-v0.1.9-browser.txt),
+[panel/model/SSE](evidence/dc-v0.1.9-panel.txt),
+[timeline browser output](evidence/dc-v0.1.9-timeline-browser.txt),
+[checks](evidence/timeline-check.json),
+[ARM64 build](evidence/dc-v0.1.9-build-arm64.txt),
+[AMD64 build](evidence/dc-v0.1.9-build-amd64.txt).
+Screenshots: [desktop feed](evidence/timeline-archive-1280.png),
+[mobile feed](evidence/timeline-archive-390.png),
+[desktop Model](evidence/timeline-model-1280.png),
+[mobile Model](evidence/timeline-model-390.png).
+
+Final images:
+```text
+arm64 sha256:204ebd7a9f3a3b4391643eac36044f320310d3e5b5d754e2dd247f006566b3c1
+amd64 sha256:f6110e866eec4dd6bd599ff7ee6fcb67fec1dbca92b03ebda9ca013d40e7062b
+```
+ARM64 exercised the complete default-entrypoint and browser fixture. AMD64 was
+built and its PB executable checked under emulation, not on native AMD64.
+Independent scoped code review approved the implementation. UI detector ran in
+**degraded regex mode** (HTML/CSS parser modules unavailable); it returned no
+findings but did not evaluate computed contrast. Actual 1280px/390px screenshots
+and document-width assertions caught and fixed intrinsic select/grid clipping.
+No new dependency was installed to satisfy the detector.
+
+The message schema is unchanged: aggregation and display use `ts` (the SDK's
+`timestamp`), never `created_at`. Successful import times are explicitly stored
+in existing `dc_settings` records; older unknown import times are not invented.
+
+Acceptance coverage:
+- Authenticated actual-PocketBase day/hour aggregation straddles UTC 16:59:59 /
+  17:00:00 (Bangkok midnight), includes leap day and a zero-message-day gap,
+  and excludes an intentionally different import timestamp from all buckets.
+- Parent channel counts exclude thread replies; thread and guild totals match
+  archive rows. Invalid buckets and anonymous timeline requests are denied.
+- Sidebar absolute +07 times with UTC hover, ticking relative ages, sticky day
+  headings, historical date/bar navigation and day/hour timelines. Historic
+  views remain scoped through live updates and realtime reconnect.
+- Model first/last/explicit imported-at dates and activity sorting preserve the
+  guild → channel → thread hierarchy. Full sparse histogram history remains
+  reachable; gaps mean absent archive rows, not guaranteed Discord inactivity.
+- Existing ingestion, model validation, auth/storage isolation, Gateway/REST
+  dedupe, restart persistence and source SQLite immutability checks retained.
+
+Reproduce:
+
+```sh
+PATH=/tmp/discord-pb-model-tests/bin:$PATH just verify
+# Build the ARM64 proof image using the README Docker command first.
+./tests/local-proof.sh --keep
+./tests/browser-proof.sh
+./tests/panel-proof.sh
+./tests/timeline-browser-proof.sh
+```
+
+No new options. Leave the deployed `live:false` and widened guild list intact.
+The lead can use the README rsync/update/restart handoff after reviewing the
+commit; a restart alone does not install updated image code. Fixtures do not
+prove live Discord or real Supervisor ingress.
+
+---
+
 # v0.1.8 — live Gateway in, PocketBase realtime out (2026-09-06)
 
 **PASS — local fixtures only. STOP before deployment.** No kvmlab1 source,

@@ -168,6 +168,7 @@ class GatewayListener:
         self.resume_url = None
         self.sequence = None
         self.connected = False
+        self.connected_since = None
         self.received = self.stored = self.ignored = 0
         self.event_times = deque()
         self.last_event_at = None
@@ -191,7 +192,7 @@ class GatewayListener:
             while self.event_times and self.event_times[0] < now - 60:
                 self.event_times.popleft()
             return {"enabled": True, "connected": self.connected, "session_id": self.session_id,
-                    "updated_at": now,
+                    "updated_at": now, "connected_since": self.connected_since if self.connected else None,
                     "last_event_at": self.last_event_at,
                     "last_event_age": None if self.last_event_at is None else max(0, now - self.last_event_at),
                     "event_times": list(self.event_times), "events_per_minute": len(self.event_times), "received": self.received,
@@ -250,6 +251,8 @@ class GatewayListener:
                 if name in {"READY", "RESUMED"}:
                     self._established.set()
                 with self._lock:
+                    if name in {"READY", "RESUMED"}:
+                        self.connected_since = self.clock()
                     self.sequence = sequence
                     self.stored += stored
                     self.ignored += ignored
@@ -381,7 +384,7 @@ class GatewayListener:
             if heartbeat_thread:
                 heartbeat_thread.join(timeout=1)
             ws.abort()
-            with self._lock: self.connected = False
+            with self._lock: self.connected = False; self.connected_since = None
             self._write_status()
 
     def run(self, max_connections=None):

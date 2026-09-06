@@ -343,6 +343,7 @@ def main():
                     result = backfill(channel, token, state.get(channel))
                     candidate = dict(state); candidate[channel] = result["high_water"]
                     save_state(candidate, STATE_FILE); state = candidate
+                    pb_post("/api/discord/internal/import-complete", {"entity_id": channel})
                     inserted += result["inserted"]; updated += result["updated"]
                     if channel in requests:
                         pb_post("/api/discord/internal/import-ack", {"entity_id": channel, "request_id": requests[channel]})

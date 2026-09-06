@@ -2,7 +2,11 @@
 const $ = (id) => document.getElementById(id);
 const KEY = "__dc_superuser_auth__";
 let session = null, page = 1, pages = 1, importBatch = null, authenticated = false, configModel = null;
+let currentMessages = [], discoveredChannels = [], timelineTarget = null, activeDay = null;
+let timelineData = null, timelineWindow = 0;
+let messagesGeneration = 0, timelineGeneration = 0;
 let realtimeController = null, realtimeGeneration = 0, realtimeConnected = false;
+let gatewayConnectedSince = null;
 const entityNames = new Map();
 
 function notify(id, message, error = false) {
@@ -38,6 +42,7 @@ function enableSession(value) {
   authenticated = value;
   for (const id of ["filter-button", "find-button", "import-file"]) $(id).disabled = !value;
   for (const id of ["channels-refresh", "config-validate", "config-save", "config-reload", "config-download"]) $(id).disabled = !value;
+  for (const id of ["timeline-target", "timeline-bucket", "jump-date-button"]) $(id).disabled = !value;
   for (const input of document.querySelectorAll("#channel-list input, #channel-list button")) input.disabled = !value || input.dataset.locked === "true";
 }
 async function authenticate() {
@@ -115,6 +120,16 @@ function fieldInput(label, value, className = "channel-policy") {
   input.className = className; input.setAttribute("aria-label", label); input.placeholder = label;
   return input;
 }
+function compactDate(value) { return DCTime.absolute(value).replace(/:\d{2} \+07$/, " +07"); }
+function activityValue(row) { return Date.parse(row.last_message_at || 0) || 0; }
+function openTimeline(kind, id, name) {
+  showTab("archive");
+  const value = kind + ":" + id;
+  $("timeline-target").value = value;
+  timelineTarget = {kind, id, name};
+  Promise.all([loadTimeline(), activeDay ? loadMessages() : Promise.resolve()]).catch(error => notify("timeline-range", error.message, true));
+  $("timeline-title").scrollIntoView({behavior: "smooth", block: "start"});
+}
 function addChannelRow(container, row, policy) {
   const div = document.createElement("div"); div.className = "channel-choice" + (row.kind === "thread" ? " thread" : "");
   const selected = document.createElement("input"); selected.type = "checkbox"; selected.className = "import-toggle";
@@ -126,13 +141,21 @@ function addChannelRow(container, row, policy) {
   name.textContent = (row.kind === "thread" ? "↳ " : "") + (row.name || "Unnamed");
   const metadata = document.createElement("span"); metadata.className = "channel-detail";
   metadata.textContent = row.id + " · " + Number(row.imported_count || 0).toLocaleString() + " imported" + (row.archived ? " · archived" : "");
+  const dates = document.createElement("span"); dates.className = "channel-dates";
+  const messageRange = row.first_message_at || row.last_message_at
+    ? (row.first_message_at ? compactDate(row.first_message_at) : "Unknown") + " → " + (row.last_message_at ? compactDate(row.last_message_at) : "Unknown")
+    : "No messages";
+  dates.textContent = "Messages: " + messageRange + " · imported at " + (row.last_import_at ? compactDate(row.last_import_at) : "Not recorded");
   identity.append(name, metadata);
+  identity.append(dates);
   const purpose = fieldInput("Purpose", policy.purpose);
   const owner = fieldInput("Owner", policy.owner);
   const postLabel = document.createElement("label"); postLabel.className = "field-label channel-policy"; postLabel.textContent = "Post ";
   const post = document.createElement("input"); post.type = "checkbox"; post.checked = policy.post === true; postLabel.append(post);
   const actions = fieldInput("Actions: thread, pin, archive", Array.isArray(policy.actions) ? policy.actions.join(", ") : "");
   const save = document.createElement("button"); save.type = "button"; save.className = "row-save"; save.textContent = "Save";
+  const timeline = document.createElement("button"); timeline.type = "button"; timeline.className = "secondary row-timeline"; timeline.textContent = "Timeline";
+  timeline.onclick = () => openTimeline("channel", row.id, row.name || row.id);
   if (row.importable !== false) selected.onchange = () => setChannelSelected(row, selected);
   save.onclick = async () => {
     save.disabled = true;
@@ -145,7 +168,7 @@ function addChannelRow(container, row, policy) {
     } catch (error) { notify("channels-status", error.message, true); }
     finally { save.disabled = !authenticated; }
   };
-  div.append(selected, identity, purpose, owner, postLabel, actions, save);
+  div.append(selected, identity, purpose, owner, postLabel, actions, timeline, save);
   container.append(div);
 }
 async function loadChannels() {
@@ -154,23 +177,43 @@ async function loadChannels() {
   const rawYaml = await apiText("api/dc/config.yaml");
   $("config-yaml").value = rawYaml;
   const [channelData, model] = await Promise.all([api("api/dc/channels"), api("api/dc/config")]);
-  const rows = channelRows(channelData); configModel = model;
+  const rows = channelRows(channelData); discoveredChannels = rows; configModel = model;
+  populateTimelineTargets(rows);
   const policies = model?.channels && typeof model.channels === "object" ? model.channels : {};
   $("channel-list").replaceChildren();
   const guilds = new Map();
   for (const row of rows) {
-    const guild = row.guild || "Unknown guild";
-    if (!guilds.has(guild)) guilds.set(guild, []);
-    guilds.get(guild).push(row);
+    const guildId = row.guild_id || "unknown:" + (row.guild || "Unknown guild");
+    if (!guilds.has(guildId)) guilds.set(guildId, {name: row.guild || row.guild_id || "Unknown guild", rows: []});
+    guilds.get(guildId).rows.push(row);
   }
-  for (const [guild, guildRows] of [...guilds.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  const activitySort = $("channel-sort").value === "activity";
+  const guildEntries = [...guilds.entries()].sort((a, b) => activitySort
+    ? Math.max(0, ...b[1].rows.map(activityValue)) - Math.max(0, ...a[1].rows.map(activityValue))
+    : a[1].name.localeCompare(b[1].name) || a[0].localeCompare(b[0]));
+  for (const [groupId, guildGroup] of guildEntries) {
+    const guild = guildGroup.name, guildRows = guildGroup.rows;
     const group = document.createElement("section"); group.className = "guild-group";
-    const title = document.createElement("h3"); title.className = "guild-title"; title.textContent = guild; group.append(title);
+    const heading = document.createElement("div"); heading.className = "guild-title";
+    const titleBox = document.createElement("div"), title = document.createElement("h3"); title.textContent = guild;
+    const guildDates = document.createElement("span"); guildDates.className = "channel-dates";
+    const firstDates = guildRows.map(row => row.first_message_at).filter(Boolean).sort();
+    const lastDates = guildRows.map(row => row.last_message_at).filter(Boolean).sort();
+    const importDates = guildRows.map(row => row.last_import_at).filter(Boolean).sort();
+    guildDates.textContent = firstDates.length
+      ? `Messages: ${compactDate(firstDates[0])} → ${compactDate(lastDates[lastDates.length - 1])} · last channel import ${importDates.length ? compactDate(importDates[importDates.length - 1]) : "Not recorded"}`
+      : `Messages: No messages · last channel import ${importDates.length ? compactDate(importDates[importDates.length - 1]) : "Not recorded"}`;
+    titleBox.append(title, guildDates);
+    const guildTimeline = document.createElement("button"); guildTimeline.type = "button"; guildTimeline.className = "secondary"; guildTimeline.textContent = "Timeline";
+    const guildId = groupId.startsWith("unknown:") ? null : groupId;
+    guildTimeline.disabled = !guildId; guildTimeline.dataset.locked = guildId ? "false" : "true";
+    if (guildId) guildTimeline.onclick = () => openTimeline("guild", guildId, guild);
+    heading.append(titleBox, guildTimeline); group.append(heading);
     const threads = guildRows.filter(row => row.kind === "thread");
-    const channels = guildRows.filter(row => row.kind !== "thread");
+    const channels = guildRows.filter(row => row.kind !== "thread").sort((a, b) => activitySort ? activityValue(b) - activityValue(a) : (a.name || a.id).localeCompare(b.name || b.id));
     for (const row of channels) {
       addChannelRow(group, row, policies[row.id] || {});
-      for (const thread of threads.filter(item => item.parent === row.id)) addChannelRow(group, thread, policies[thread.id] || {});
+      for (const thread of threads.filter(item => item.parent === row.id).sort((a, b) => activitySort ? activityValue(b) - activityValue(a) : (a.name || a.id).localeCompare(b.name || b.id))) addChannelRow(group, thread, policies[thread.id] || {});
     }
     for (const thread of threads.filter(item => !channels.some(row => row.id === item.parent))) addChannelRow(group, thread, policies[thread.id] || {});
     $("channel-list").append(group);
@@ -178,24 +221,124 @@ async function loadChannels() {
   notify("channels-status", rows.length ? rows.length.toLocaleString() + " discovered channels and threads · config " + (model?.exists ? "loaded" : "not created yet") + "." : "No channels discovered yet. Add a guild in the add-on options, then run backfill.");
 }
 async function loadMessages() {
+  const generation = ++messagesGeneration;
   notify("message-status", "Loading messages…");
   const channel = $("channel-filter").value.trim();
   if (channel && !/^[0-9]{17,20}$/.test(channel)) throw new Error("Use a 17–20 digit channel or thread ID. Find a name in the lookup box.");
   const query = new URLSearchParams({page, perPage: 20, sort: "-ts,-message_id"});
-  if (channel) query.set("filter", "channel_id=" + JSON.stringify(channel) + " || thread_id=" + JSON.stringify(channel));
+  const clauses = [];
+  if (activeDay) {
+    const bounds = DCTime.bounds(activeDay);
+    clauses.push(`ts >= ${JSON.stringify(bounds.since.replace("T", " "))}`, `ts < ${JSON.stringify(bounds.before.replace("T", " "))}`);
+    if (timelineTarget?.kind === "guild") clauses.push(`guild_id = ${JSON.stringify(timelineTarget.id)}`);
+    if (timelineTarget?.kind === "channel") {
+      const entity = discoveredChannels.find(row => row.id === timelineTarget.id);
+      clauses.push(entity?.kind === "thread" ? `thread_id = ${JSON.stringify(timelineTarget.id)}`
+        : `(channel_id = ${JSON.stringify(timelineTarget.id)} && (thread_id = "" || thread_id = null))`);
+    }
+  } else if (channel) clauses.push("(channel_id=" + JSON.stringify(channel) + " || thread_id=" + JSON.stringify(channel) + ")");
+  if (clauses.length) query.set("filter", clauses.join(" && "));
   const data = await api("api/collections/discord_messages/records?" + query);
-  const ids = [...new Set(data.items.flatMap(row => [row.channel_id, row.thread_id, row.guild_id]).filter(Boolean))];
-  if (ids.length) {
-    const eq = new URLSearchParams({perPage: 100, filter: ids.map(id => "entity_id=" + JSON.stringify(id)).join(" || ")});
-    const entities = await api("api/collections/discord_entities/records?" + eq);
-    for (const entity of entities.items) entityNames.set(entity.entity_id, entity.name);
-  }
-  $("messages").replaceChildren();
-  for (const row of data.items) $("messages").append(messageElement(row));
+  if (generation !== messagesGeneration) return false;
+  await hydrateEntityNames(data.items);
+  if (generation !== messagesGeneration) return false;
+  currentMessages = data.items;
+  renderMessages();
   pages = Math.max(1, data.totalPages);
-  notify("page-label", "Page " + page + " of " + pages);
-  notify("message-status", data.totalItems ? data.totalItems.toLocaleString() + " matching messages" : "No messages yet. Configure a Discord backfill or import a JSON batch.");
+  notify("page-label", (activeDay ? DCTime.dayLabel(DCTime.bounds(activeDay).since) + " · " : "") + "Page " + page + " of " + pages);
+  notify("message-status", data.totalItems ? data.totalItems.toLocaleString() + (activeDay ? " messages on this Bangkok date" : " matching messages") : (activeDay ? "No messages on this Bangkok date." : "No messages yet. Configure a Discord backfill or import a JSON batch."));
   $("previous").disabled = page <= 1; $("next").disabled = page >= pages;
+  return true;
+}
+function populateTimelineTargets(rows) {
+  const select = $("timeline-target"), previous = select.value;
+  select.replaceChildren(new Option("Choose a target", ""));
+  const guildGroup = document.createElement("optgroup"); guildGroup.label = "Guilds";
+  const guilds = new Map();
+  for (const row of rows) if (row.guild_id && !guilds.has(row.guild_id)) guilds.set(row.guild_id, row.guild || row.guild_id);
+  for (const [id, name] of [...guilds].sort((a, b) => a[1].localeCompare(b[1]))) guildGroup.append(new Option(name + " · " + id, "guild:" + id));
+  const channelGroup = document.createElement("optgroup"); channelGroup.label = "Channels and threads";
+  for (const row of [...rows].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))) channelGroup.append(new Option((row.name || "Unnamed") + " · " + row.id, "channel:" + row.id));
+  select.append(guildGroup, channelGroup);
+  if ([...select.options].some(option => option.value === previous)) select.value = previous;
+  else if (rows.length) select.value = "channel:" + rows[0].id;
+  const [kind, id] = select.value.split(":");
+  const option = select.selectedOptions[0];
+  timelineTarget = id ? {kind, id, name: option.textContent.replace(/ · \d{17,20}$/, "")} : null;
+}
+function timelinePath(target) {
+  const resource = target.kind === "guild" ? "guilds" : "channels";
+  return "api/dc/" + resource + "/" + encodeURIComponent(target.id) + "/timeline?bucket=" + encodeURIComponent($("timeline-bucket").value);
+}
+async function loadTimeline() {
+  const generation = ++timelineGeneration;
+  if (!timelineTarget) {
+    timelineData = null; $("timeline-strip").replaceChildren(); $("timeline-older").disabled = true; $("timeline-newer").disabled = true;
+    notify("timeline-window", ""); notify("timeline-range", "Choose a channel or guild to see its imported range."); return;
+  }
+  notify("timeline-range", "Loading " + timelineTarget.name + " timeline…");
+  const data = await api(timelinePath(timelineTarget));
+  if (generation !== timelineGeneration) return false;
+  timelineData = data; timelineWindow = 0;
+  notify("timeline-range", data.total
+    ? `${Number(data.total).toLocaleString()} messages · ${DCTime.absolute(data.first)} → ${DCTime.absolute(data.last)}`
+    : "No imported messages for this target.");
+  renderTimelineWindow();
+  const gaps = Array.isArray(data.gaps) ? data.gaps : [];
+  notify("timeline-gaps", gaps.length
+    ? gaps.slice(0, 20).map(gap => `${gap.days} empty day${gap.days === 1 ? "" : "s"}: ${gap.since} → ${gap.before}`).join(" · ") + (gaps.length > 20 ? ` · ${gaps.length - 20} more gaps` : "")
+    : (data.total ? "No empty days inside this imported range." : ""));
+  return true;
+}
+function renderTimelineWindow() {
+  const strip = $("timeline-strip"); strip.replaceChildren();
+  const all = Array.isArray(timelineData?.buckets) ? timelineData.buckets : [];
+  const limit = timelineData?.bucket === "hour" ? 168 : 240;
+  const windows = Math.max(1, Math.ceil(all.length / limit)); timelineWindow = Math.max(0, Math.min(timelineWindow, windows - 1));
+  const end = all.length - timelineWindow * limit, start = Math.max(0, end - limit);
+  const buckets = all.slice(start, end), maximum = Math.max(1, ...buckets.map(item => Number(item.count) || 0));
+  delete strip.dataset.notice;
+  for (const bucket of buckets) {
+    const bar = document.createElement("button"); bar.type = "button"; bar.className = "timeline-bar"; bar.setAttribute("role", "listitem");
+    bar.style.setProperty("--height", Math.max(8, Math.round((Number(bucket.count) || 0) / maximum * 100)) + "%");
+    bar.title = `${bucket.label} · ${Number(bucket.count).toLocaleString()} messages`;
+    bar.setAttribute("aria-label", bar.title); bar.dataset.date = bucket.date;
+    const count = document.createElement("span"); count.textContent = Number(bucket.count).toLocaleString();
+    const label = document.createElement("small"); label.textContent = bucket.label; bar.append(count, label);
+    bar.onclick = () => jumpToDate(bucket.date);
+    strip.append(bar);
+  }
+  if (!buckets.length) { const empty = document.createElement("p"); empty.className = "hint"; empty.textContent = "No active time buckets."; strip.append(empty); }
+  $("timeline-older").disabled = !authenticated || start === 0;
+  $("timeline-newer").disabled = !authenticated || timelineWindow === 0;
+  notify("timeline-window", all.length > limit ? `Active buckets ${start + 1}–${end} of ${all.length}` : "");
+}
+async function jumpToDate(day) {
+  DCTime.bounds(day); $("jump-date-input").value = day; activeDay = day; page = 1;
+  await loadMessages();
+  const separator = document.querySelector(`.day-separator[data-day="${CSS.escape(day)}"]`);
+  (separator || $("messages-title")).scrollIntoView({behavior: "smooth", block: "start"});
+}
+async function hydrateEntityNames(rows) {
+  const ids = [...new Set(rows.flatMap(row => [row.channel_id, row.thread_id, row.guild_id]).filter(Boolean))];
+  if (!ids.length) return;
+  const eq = new URLSearchParams({perPage: 100, filter: ids.map(id => "entity_id=" + JSON.stringify(id)).join(" || ")});
+  const entities = await api("api/collections/discord_entities/records?" + eq);
+  for (const entity of entities.items) entityNames.set(entity.entity_id, entity.name);
+}
+function renderMessages() {
+  $("messages").replaceChildren();
+  let previousDay = "";
+  for (const row of currentMessages) {
+    const day = DCTime.bangkokDay(row.ts);
+    if (day !== previousDay) {
+      const separator = document.createElement("li"); separator.className = "day-separator"; separator.dataset.day = day;
+      const label = document.createElement("span"); label.textContent = DCTime.dayLabel(row.ts); separator.append(label);
+      $("messages").append(separator); previousDay = day;
+    }
+    $("messages").append(messageElement(row));
+  }
+  tickRelativeTimes();
 }
 function deletedMessage(row) {
   let raw = row.raw;
@@ -204,12 +347,14 @@ function deletedMessage(row) {
 }
 function messageElement(row, action = "") {
     const li = document.createElement("li"), meta = document.createElement("div");
+    li.className = "message-row";
     li.dataset.messageId = row.message_id || "";
     meta.className = "message-meta";
     const author = document.createElement("strong"); author.textContent = row.author_name || row.author_id;
-    const time = document.createElement("time"); time.dateTime = row.ts;
-    const date = new Date(row.ts); time.textContent = Number.isNaN(date.getTime()) ? row.ts : date.toLocaleString();
-    meta.append(author, time);
+    const time = document.createElement("time"); time.dateTime = DCTime.iso(row.ts); time.title = DCTime.iso(row.ts);
+    const absolute = document.createElement("span"); absolute.className = "absolute-time"; absolute.textContent = DCTime.absolute(row.ts);
+    const relative = document.createElement("span"); relative.className = "relative-time"; relative.dataset.ts = DCTime.iso(row.ts);
+    time.append(absolute, relative); meta.append(author, time);
     const content = document.createElement("p"); content.className = "message-content";
     const deleted = action === "delete" || deletedMessage(row);
     content.textContent = deleted ? "(Deleted message)" : (row.content || "(No text content)");
@@ -220,18 +365,32 @@ function messageElement(row, action = "") {
     li.append(meta, content, detail, copyButton(row.message_id));
     return li;
 }
+function tickRelativeTimes() {
+  const now = Date.now();
+  for (const node of document.querySelectorAll(".relative-time[data-ts]")) node.textContent = DCTime.relative(node.dataset.ts, now);
+}
 function matchesCurrentChannel(row) {
+  if (activeDay) {
+    if (DCTime.bangkokDay(row.ts) !== activeDay) return false;
+    if (timelineTarget?.kind === "guild") return row.guild_id === timelineTarget.id;
+    if (timelineTarget?.kind === "channel") {
+      const entity = discoveredChannels.find(item => item.id === timelineTarget.id);
+      return entity?.kind === "thread" ? row.thread_id === timelineTarget.id : row.channel_id === timelineTarget.id && !row.thread_id;
+    }
+    return true;
+  }
   const channel = $("channel-filter").value.trim();
   return !channel || row.channel_id === channel || row.thread_id === channel;
 }
 function applyRealtimeMessage(row, action) {
   if (!row?.message_id) return;
-  const existing = [...$("messages").children].find(item => item.dataset.messageId === row.message_id);
-  if (!matchesCurrentChannel(row)) { existing?.remove(); return; }
-  const replacement = messageElement(row, action);
-  if (existing) existing.replaceWith(replacement);
-  else if (page === 1) $("messages").prepend(replacement);
-  while ($("messages").children.length > 20) $("messages").lastElementChild.remove();
+  const index = currentMessages.findIndex(item => item.message_id === row.message_id);
+  if (!matchesCurrentChannel(row)) { if (index >= 0) currentMessages.splice(index, 1); renderMessages(); return; }
+  const normalized = action === "delete" ? {...row, raw: {...(typeof row.raw === "object" ? row.raw : {}), _discord_pb_deleted: true}} : row;
+  if (index >= 0) currentMessages[index] = normalized;
+  else if (page === 1) currentMessages.push(normalized);
+  currentMessages.sort((a, b) => String(b.ts).localeCompare(String(a.ts)) || String(b.message_id).localeCompare(String(a.message_id)));
+  currentMessages = currentMessages.slice(0, 20); renderMessages();
 }
 class PanelSSEDecoder {
   constructor() { this.buffer = ""; }
@@ -262,7 +421,7 @@ function startRealtime() {
     while (!controller.signal.aborted && generation === realtimeGeneration) {
       let reader = null;
       try {
-        notify("live-status", "Connecting live updates…");
+        notify("live-status", "Connecting panel updates…");
         const response = await fetch("./api/realtime", {headers: {Accept: "text/event-stream", Authorization: session.token}, signal: controller.signal, cache: "no-store"});
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         reader = response.body.getReader();
@@ -278,7 +437,7 @@ function startRealtime() {
                 body: JSON.stringify({clientId: data.clientId, subscriptions: ["discord_messages/*"]})});
               if (!subscribe.ok) throw new Error("subscription HTTP " + subscribe.status);
               subscribed = true; realtimeConnected = true;
-              notify("live-status", "Live updates connected.");
+              notify("live-status", "Panel updates connected.");
               // Close the initial load -> subscribe race, and fill non-replayed
               // gaps after reconnect. Rendering is idempotent by message_id.
               await loadMessages();
@@ -291,11 +450,18 @@ function startRealtime() {
       } catch (error) {
         try { await reader?.cancel(); } catch (_) {}
         if (controller.signal.aborted) break;
-        realtimeConnected = false; notify("live-status", "Live updates reconnecting…", true);
+        realtimeConnected = false; notify("live-status", "Panel updates reconnecting…", true);
       }
       if (!controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000));
     }
   })();
+}
+async function refreshGatewayStatus() {
+  const data = await api("api/dc/status"), live = data.live_status || {};
+  gatewayConnectedSince = live.connected && live.connected_since ? live.connected_since : null;
+  notify("gateway-status", gatewayConnectedSince
+    ? "Discord Gateway live since " + DCTime.absolute(gatewayConnectedSince) + "."
+    : "Discord Gateway is not connected; polling remains the archive reconciler.");
 }
 async function loadJob() {
   const job = await api("api/discord/backfill");
@@ -310,7 +476,8 @@ async function refresh() {
   try {
     await totals();
     await authenticate();
-    await Promise.all([loadMessages(), loadJob(), loadChannels()]);
+    await Promise.all([loadMessages(), loadJob(), loadChannels(), refreshGatewayStatus()]);
+    await loadTimeline();
     startRealtime();
   } catch (error) {
     notify("login-status", error.message + " You can also sign in using Open PocketBase admin, then return and Refresh.", true);
@@ -325,6 +492,20 @@ function showTab(name) {
 }
 $("archive-tab").onclick = () => showTab("archive");
 $("model-tab").onclick = () => showTab("model");
+$("channel-sort").onchange = () => loadChannels().catch(error => notify("channels-status", error.message, true));
+$("timeline-target").onchange = () => {
+  const [kind, id] = $("timeline-target").value.split(":");
+  const option = $("timeline-target").selectedOptions[0];
+  timelineTarget = id ? {kind, id, name: option.textContent.replace(/ · \d{17,20}$/, "")} : null;
+  Promise.all([loadTimeline(), activeDay ? loadMessages() : Promise.resolve()]).catch(error => notify("timeline-range", error.message, true));
+};
+$("timeline-bucket").onchange = () => loadTimeline().catch(error => notify("timeline-range", error.message, true));
+$("timeline-older").onclick = () => { timelineWindow++; renderTimelineWindow(); };
+$("timeline-newer").onclick = () => { timelineWindow--; renderTimelineWindow(); };
+$("jump-date").onsubmit = event => {
+  event.preventDefault();
+  jumpToDate($("jump-date-input").value).catch(error => notify("message-status", error.message, true));
+};
 $("channels-refresh").onclick = async () => {
   $("channels-refresh").disabled = true;
   try { await loadChannels(); } catch (error) { notify("channels-status", error.message, true); }
@@ -359,7 +540,7 @@ $("config-download").onclick = () => {
   notify("config-status", "Downloaded dc.config.yaml.");
 };
 $("message-filter").onsubmit = async event => {
-  event.preventDefault(); page = 1;
+  event.preventDefault(); page = 1; activeDay = null; $("jump-date-input").value = "";
   try { await loadMessages(); } catch (error) { notify("message-status", error.message, true); }
 };
 for (const [id, direction] of [["previous", -1], ["next", 1]]) $(id).onclick = async () => {
@@ -423,7 +604,8 @@ $("backfill").onclick = async () => {
 };
 setInterval(async () => {
   if (!authenticated || document.hidden) return;
-  try { await authenticate(); await loadJob(); await totals(); }
+  try { await authenticate(); await loadJob(); await totals(); await refreshGatewayStatus(); }
   catch (_) { notify("login-status", "Session refresh failed. Use Refresh to reconnect.", true); }
 }, 60000);
+setInterval(tickRelativeTimes, 30000);
 refresh();

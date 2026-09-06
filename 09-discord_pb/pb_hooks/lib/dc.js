@@ -172,6 +172,17 @@ function createDC(config) {
       read(options = {}) {
         return map(request("GET", path + "/read" + query(options)), (data) => arrayFrom(data, "messages"));
       },
+      timeline(options = {}) {
+        if (options.bucket !== undefined && options.bucket !== "day" && options.bucket !== "hour") {
+          throw new Error("timeline bucket must be day or hour");
+        }
+        return map(request("GET", path + "/timeline" + query(options)), (data) => {
+          if (!data || typeof data !== "object" || !Array.isArray(data.buckets)) {
+            throw new Error("Discord channel API returned an invalid timeline response");
+          }
+          return data;
+        });
+      },
       import() {
         return request("POST", path + "/import", {});
       },
@@ -337,7 +348,21 @@ function createDC(config) {
     guild(x) {
       if (typeof x !== "string" || !x.trim())
         throw new Error("guild(x) requires a guild ID or name");
-      return { channels: () => channels({ guild: x.trim() }) };
+      const guildPath = "/guilds/" + encodeURIComponent(x.trim());
+      return {
+        channels: () => channels({ guild: x.trim() }),
+        timeline(options = {}) {
+          if (options.bucket !== undefined && options.bucket !== "day" && options.bucket !== "hour") {
+            throw new Error("timeline bucket must be day or hour");
+          }
+          return map(request("GET", guildPath + "/timeline" + query(options)), (data) => {
+            if (!data || typeof data !== "object" || !Array.isArray(data.buckets)) {
+              throw new Error("Discord channel API returned an invalid timeline response");
+            }
+            return data;
+          });
+        }
+      };
     }
   };
 }

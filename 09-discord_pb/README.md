@@ -449,3 +449,53 @@ ssh kvmlab1.oracle.netbird \
 ```
 
 No deployment, live options change, or Discord write was made during this task.
+
+
+## Time-first archive — v0.1.9
+
+The sidebar displays message creation times in **Asia/Bangkok (+07)**, with
+ISO UTC on hover and relative ages refreshed every 30 seconds. Day headings are
+sticky; select a guild/channel/thread and use a timeline bar or **Jump to date**
+to browse history. Day/hour histograms cover the imported range, with first/last
+message dates and explicit zero-message-day gaps. A gap means **no archived rows
+for that day**, not proof Discord was inactive or that import is complete.
+The Model tree adds first/last message dates, last-import time, and activity sort.
+
+The existing PocketBase field is `discord_messages.ts` (exposed as `timestamp`
+by the SDK). It remains the only feed/timeline clock. No message schema change.
+“Imported at” is tracked separately in existing `dc_settings` rows; it updates
+on committed REST/JSON batches and successful completed channel sweeps, including
+empty sweeps. Gateway deliveries do not update it. Imports predating this build
+show **Not recorded** until a new import; no historical time is fabricated.
+“Live since” uses the current Gateway connection's READY/RESUMED time, not the
+first message or import time, and disappears when the connection is stale.
+
+Authenticated API (same ingress-minted or manual PB superuser token):
+
+```text
+GET /api/dc/channels/{id-or-name}/timeline?bucket=day
+GET /api/dc/guilds/{id-or-name}/timeline?bucket=hour
+```
+
+Responses include `time_zone`, `target`, `first`, `last`, `total`, sparse nonzero
+`buckets: [{start, date, label, count}]`, and zero-day `gaps` with inclusive
+`since`, exclusive `before`, and `days`. Bucket starts/first/last are ISO UTC;
+labels and dates use Bangkok. Parent channels exclude child-thread replies;
+thread handles are exact, while guilds include their channels and threads.
+Counts include retained deletion tombstones, like the archive list.
+
+```ts
+await dc.channel("arra-01").timeline({bucket: "day"});
+await dc.guild("Mini lab").timeline({bucket: "hour"});
+```
+
+```sh
+bun sdk/cli.ts channel arra-01 timeline --bucket day
+```
+
+**Deployment boundary:** this revision was tested locally, not deployed.
+There are **no new options**. Use the rsync/update/restart commands above only
+when the lead deploys; leave the existing options intact, including `live:false`
+until Nat enables Message Content Intent, all four configured guilds (including
+Arthur Visions and Cat Lab & Co), selections, and credentials. Do not replace
+options with the older v0.1.8 example.

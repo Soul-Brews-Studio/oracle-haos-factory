@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-import {createDC, type ReadOptions} from "./dc.ts";
+import {createDC, type ReadOptions, type TimelineOptions} from "./dc.ts";
 
 export type CLICommand =
   | {kind: "channels"}
   | {kind: "guild"; guild: string}
   | {kind: "config"; action: "get" | "download"}
-  | {kind: "channel"; channel: string; action: string; args: string[]; read: ReadOptions};
+  | {kind: "channel"; channel: string; action: string; args: string[]; read: ReadOptions; timeline?: TimelineOptions};
 
 function usage(message?: string): never {
   const prefix = message ? message + "\n\n" : "";
@@ -15,6 +15,7 @@ function usage(message?: string): never {
     "  bun sdk/cli.ts guild <id-or-name> channels",
     "  bun sdk/cli.ts config [get|download]",
     "  bun sdk/cli.ts channel <id-or-name> read [--limit N] [--since ISO] [--before ISO]",
+    "  bun sdk/cli.ts channel <id-or-name> timeline [--bucket day|hour]",
     "  bun sdk/cli.ts channel <id-or-name> tail",
     "  bun sdk/cli.ts channel <id-or-name> import",
     "  bun sdk/cli.ts channel <id-or-name> post <text>",
@@ -36,9 +37,10 @@ export function parseCLI(args: string[]): CLICommand {
   }
   if (args[0] !== "channel" || !args[1] || !args[2]) usage("Missing channel command");
   const [, channel, action, ...rest] = args;
-  const allowed = new Set(["read", "tail", "import", "post", "thread", "pin", "archive"]);
+  const allowed = new Set(["read", "timeline", "tail", "import", "post", "thread", "pin", "archive"]);
   if (!allowed.has(action)) usage("Unknown channel action: " + action);
   const read: ReadOptions = {};
+  const timeline: TimelineOptions = {};
   if (action === "read") {
     for (let i = 0; i < rest.length; i += 2) {
       const flag = rest[i], value = rest[i + 1];
@@ -50,11 +52,18 @@ export function parseCLI(args: string[]): CLICommand {
       } else if (flag === "--since") read.since = value;
       else read.before = value;
     }
+  } else if (action === "timeline") {
+    if (rest.length) {
+      if (rest.length !== 2 || rest[0] !== "--bucket" || (rest[1] !== "day" && rest[1] !== "hour")) usage("timeline expects --bucket day|hour");
+      timeline.bucket = rest[1] as "day" | "hour";
+    }
   } else {
     const expected: Record<string, number> = {tail: 0, import: 0, post: 1, thread: 2, pin: 1, archive: 0};
     if (rest.length !== expected[action]) usage(action + " expects " + expected[action] + " argument(s)");
   }
-  return {kind: "channel", channel, action, args: action === "read" ? [] : rest, read};
+  const command: CLICommand = {kind: "channel", channel, action, args: action === "read" || action === "timeline" ? [] : rest, read};
+  if (action === "timeline") command.timeline = timeline;
+  return command;
 }
 
 export function run(command: CLICommand, client: ReturnType<typeof createDC>) {
@@ -63,6 +72,7 @@ export function run(command: CLICommand, client: ReturnType<typeof createDC>) {
   if (command.kind === "config") return command.action === "download" ? client.configYaml() : client.config();
   const handle = client.channel(command.channel);
   if (command.action === "read") return handle.read(command.read);
+  if (command.action === "timeline") return handle.timeline(command.timeline || {});
   if (command.action === "tail") return handle.stream((record, action) => {
     console.log(JSON.stringify({action, record}));
   });

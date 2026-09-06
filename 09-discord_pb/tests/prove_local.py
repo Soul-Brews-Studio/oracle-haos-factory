@@ -330,6 +330,7 @@ def main():
                              capture_output=True, text=True, timeout=30)
         assert sdk.returncode == 0, sdk.stdout + sdk.stderr
         log(sdk.stdout.rstrip())
+        log(command("docker", "exec", app, "python3", "/tests/timeline_probe.py"))
         after_hash = source_hashes(source)
         assert before_hash == after_hash, "Source archive changed during proof (could be external writer); rerun for integrity proof"
         log("PASS source DB/WAL/SHM SHA256 unchanged")
