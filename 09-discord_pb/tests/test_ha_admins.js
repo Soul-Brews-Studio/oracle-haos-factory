@@ -1,0 +1,17 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {isAdmin, parseAdmins, MAX_AGE_MS} = require('../pb_hooks/lib/ha_admins.js');
+const now = Date.parse('2026-09-07T00:10:00Z');
+const fresh = JSON.stringify({at: '2026-09-07T00:05:00+00:00', admins: ['adm1', 'adm2']});
+assert.deepEqual(isAdmin(fresh, 'adm1', now), {ok: true, reason: ''});
+assert.equal(isAdmin(fresh, 'user9', now).reason, 'HA user is not an administrator');
+assert.equal(isAdmin(fresh, '', now).reason, 'HA administrator list unavailable');
+assert.equal(isAdmin('', 'adm1', now).reason, 'HA administrator list unavailable');
+assert.equal(isAdmin('{"admins":"adm1","at":"2026-09-07T00:05:00Z"}', 'adm1', now).reason, 'HA administrator list unavailable');
+assert.equal(isAdmin('not json', 'adm1', now).reason, 'HA administrator list unavailable');
+const stale = JSON.stringify({at: new Date(now - MAX_AGE_MS - 1000).toISOString(), admins: ['adm1']});
+assert.equal(isAdmin(stale, 'adm1', now).reason, 'HA administrator list is stale');
+const future = JSON.stringify({at: new Date(now + 5 * 60000).toISOString(), admins: ['adm1']});
+assert.equal(isAdmin(future, 'adm1', now).reason, 'HA administrator list is stale', 'a clock far ahead is not trusted either');
+assert.deepEqual(parseAdmins(JSON.stringify({at: '2026-09-07T00:05:00Z', admins: ['a', 7, '', 'b']})).admins, ['a', 'b']);
+console.log('ha admins tests passed');

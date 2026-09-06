@@ -34,10 +34,12 @@ routerAdd("POST", "/api/discord/internal/resolve", (e) => {
     matches: rows.map((r) => ({ entity_id: r.getString("entity_id"), kind: r.getString("kind"), name: r.getString("name"), parent_id: r.getString("parent_id"), guild_id: r.getString("guild_id") })) })
 })
 
+// Name -> id lookup. Superuser auth like every other archive read: an ingress
+// session alone is something every HA user can mint, and this route would
+// otherwise enumerate every guild, channel and thread name to them.
 routerAdd("GET", "/api/discord/entities/{name}", (e) => {
-  const peer = e.remoteIP(), ingressPeer = $os.getenv("DISCORD_PB_INGRESS_PEER") || "172.30.32.2"
-  if (peer !== ingressPeer || !e.request.header.get("X-Remote-User-Id")) return e.json(403, { ok: false, error: "Home Assistant ingress required" })
+  e.response.header().set("Cache-Control", "no-store")
   const name = e.request.pathValue("name")
   const rows = $app.findRecordsByFilter("discord_entities", "name ~ {:name}", "kind,name,entity_id", 100, 0, { name })
   return e.json(200, { ok: true, matches: rows.map((r) => ({ entity_id: r.getString("entity_id"), kind: r.getString("kind"), name: r.getString("name"), parent_id: r.getString("parent_id"), guild_id: r.getString("guild_id") })) })
-})
+}, $apis.requireSuperuserAuth())

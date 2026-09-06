@@ -7,6 +7,9 @@ let timelineData = null, timelineWindow = 0;
 let messagesGeneration = 0, timelineGeneration = 0;
 let realtimeController = null, realtimeGeneration = 0, realtimeConnected = false;
 let gatewayConnectedSince = null;
+// The channel filter that was actually submitted. Reads use this, never the
+// live input value, so half-typed text cannot break a reconnect or a reload.
+let submittedFilter = "";
 const entityNames = new Map();
 
 function notify(id, message, error = false) {
@@ -43,10 +46,16 @@ function enableSession(value) {
   for (const id of ["filter-button", "find-button", "import-file"]) $(id).disabled = !value;
   for (const id of ["channels-refresh", "config-validate", "config-save", "config-reload", "config-download"]) $(id).disabled = !value;
   for (const id of ["timeline-target", "timeline-bucket", "jump-date-button"]) $(id).disabled = !value;
-  for (const input of document.querySelectorAll("#channel-list input, #channel-list button")) input.disabled = !value || input.dataset.locked === "true";
+  for (const input of document.querySelectorAll("#channel-list input, #channel-list button")) {
+    if (input.dataset.busy === "true") continue; // a request of its own is in flight
+    input.disabled = !value || input.dataset.locked === "true";
+  }
 }
-async function authenticate() {
-  enableSession(false);
+// silent: the periodic token refresh. It must not disable (and so blur) the
+// controls someone is typing into; only the initial load and a failure do.
+async function authenticate(options = {}) {
+  const silent = options.silent === true;
+  if (!silent) enableSession(false);
   let fresh;
   try {
     fresh = await request("api/discord/admin-token", {method: "POST"});
@@ -69,6 +78,7 @@ async function authenticate() {
   }
   session = fresh;
   localStorage.setItem(KEY, JSON.stringify({token: fresh.token, record: fresh.record}));
+  if (silent) return;
   $("identity").hidden = true;
   enableSession(true);
   notify("login-status", "Signed in · Archive and import tools are ready.");
@@ -102,7 +112,7 @@ function channelRows(data) {
   throw new Error("Server returned an invalid channel list.");
 }
 async function setChannelSelected(row, input) {
-  input.disabled = true;
+  input.disabled = true; input.dataset.busy = "true";
   const wanted = input.checked;
   try {
     await api("api/dc/channels/" + encodeURIComponent(row.id) + "/select", {
@@ -113,7 +123,7 @@ async function setChannelSelected(row, input) {
   } catch (error) {
     input.checked = !wanted;
     notify("channels-status", error.message, true);
-  } finally { input.disabled = !authenticated; }
+  } finally { delete input.dataset.busy; input.disabled = !authenticated; }
 }
 function fieldInput(label, value, className = "channel-policy") {
   const input = document.createElement("input"); input.type = "text"; input.value = value || "";
@@ -126,7 +136,7 @@ function openTimeline(kind, id, name) {
   showTab("archive");
   const value = kind + ":" + id;
   $("timeline-target").value = value;
-  timelineTarget = {kind, id, name};
+  timelineTarget = {kind, id, name}; page = 1;
   Promise.all([loadTimeline(), activeDay ? loadMessages() : Promise.resolve()]).catch(error => notify("timeline-range", error.message, true));
   $("timeline-title").scrollIntoView({behavior: "smooth", block: "start"});
 }
@@ -223,8 +233,7 @@ async function loadChannels() {
 async function loadMessages() {
   const generation = ++messagesGeneration;
   notify("message-status", "Loading messages…");
-  const channel = $("channel-filter").value.trim();
-  if (channel && !/^[0-9]{17,20}$/.test(channel)) throw new Error("Use a 17–20 digit channel or thread ID. Find a name in the lookup box.");
+  const channel = submittedFilter;
   const query = new URLSearchParams({page, perPage: 20, sort: "-ts,-message_id"});
   const clauses = [];
   if (activeDay) {
@@ -379,7 +388,7 @@ function matchesCurrentChannel(row) {
     }
     return true;
   }
-  const channel = $("channel-filter").value.trim();
+  const channel = submittedFilter;
   return !channel || row.channel_id === channel || row.thread_id === channel;
 }
 function applyRealtimeMessage(row, action) {
@@ -440,7 +449,9 @@ function startRealtime() {
               notify("live-status", "Panel updates connected.");
               // Close the initial load -> subscribe race, and fill non-replayed
               // gaps after reconnect. Rendering is idempotent by message_id.
-              await loadMessages();
+              // A failed reload is a data problem, not a transport one: report
+              // it and keep the stream open instead of reconnecting every second.
+              try { await loadMessages(); } catch (error) { notify("message-status", error.message, true); }
               continue;
             }
             if (!subscribed || (event.event !== "discord_messages/*" && event.event !== "discord_messages")) continue;
@@ -476,8 +487,13 @@ async function refresh() {
   try {
     await totals();
     await authenticate();
-    await Promise.all([loadMessages(), loadJob(), loadChannels(), refreshGatewayStatus()]);
-    await loadTimeline();
+    // Each section reports its own failure in its own status line; one broken
+    // section (an invalid dc.config.yaml, say) must not read as a sign-in
+    // problem or stop the timeline and live updates from starting.
+    const sections = [["message-status", loadMessages], ["backfill-status", loadJob], ["channels-status", loadChannels], ["gateway-status", refreshGatewayStatus]];
+    const settled = await Promise.allSettled(sections.map(([, load]) => load()));
+    settled.forEach((result, index) => { if (result.status === "rejected") notify(sections[index][0], result.reason?.message || String(result.reason), true); });
+    try { await loadTimeline(); } catch (error) { notify("timeline-range", error.message, true); }
     startRealtime();
   } catch (error) {
     notify("login-status", error.message + " You can also sign in using Open PocketBase admin, then return and Refresh.", true);
@@ -496,7 +512,7 @@ $("channel-sort").onchange = () => loadChannels().catch(error => notify("channel
 $("timeline-target").onchange = () => {
   const [kind, id] = $("timeline-target").value.split(":");
   const option = $("timeline-target").selectedOptions[0];
-  timelineTarget = id ? {kind, id, name: option.textContent.replace(/ · \d{17,20}$/, "")} : null;
+  timelineTarget = id ? {kind, id, name: option.textContent.replace(/ · \d{17,20}$/, "")} : null; page = 1;
   Promise.all([loadTimeline(), activeDay ? loadMessages() : Promise.resolve()]).catch(error => notify("timeline-range", error.message, true));
 };
 $("timeline-bucket").onchange = () => loadTimeline().catch(error => notify("timeline-range", error.message, true));
@@ -540,7 +556,10 @@ $("config-download").onclick = () => {
   notify("config-status", "Downloaded dc.config.yaml.");
 };
 $("message-filter").onsubmit = async event => {
-  event.preventDefault(); page = 1; activeDay = null; $("jump-date-input").value = "";
+  event.preventDefault();
+  const channel = $("channel-filter").value.trim();
+  if (channel && !/^[0-9]{17,20}$/.test(channel)) { notify("message-status", "Use a 17–20 digit channel or thread ID. Find a name in the lookup box.", true); return; }
+  submittedFilter = channel; page = 1; activeDay = null; $("jump-date-input").value = "";
   try { await loadMessages(); } catch (error) { notify("message-status", error.message, true); }
 };
 for (const [id, direction] of [["previous", -1], ["next", 1]]) $(id).onclick = async () => {
@@ -604,7 +623,7 @@ $("backfill").onclick = async () => {
 };
 setInterval(async () => {
   if (!authenticated || document.hidden) return;
-  try { await authenticate(); await loadJob(); await totals(); await refreshGatewayStatus(); }
+  try { await authenticate({silent: true}); await loadJob(); await totals(); await refreshGatewayStatus(); }
   catch (_) { notify("login-status", "Session refresh failed. Use Refresh to reconnect.", true); }
 }, 60000);
 setInterval(tickRelativeTimes, 30000);

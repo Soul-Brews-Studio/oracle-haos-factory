@@ -1,0 +1,34 @@
+Server-by-server sidebar — live check on kvmlab1 (HA 2026.8.3, HAOS 18.2), 2026-09-07 00:2x +07
+Driver: ego-browser task space "discord-pb sidebar kvmlab1", logged in as the HA owner,
+add-on local_discord_pb 0.2.0 (rebuilt after the isolated-runtime fix), DOM assertions only —
+Page.captureScreenshot timed out in this browser session on every page, so no PNG this round.
+
+Panel route (HA 2026.8 no longer serves /hassio/ingress/<slug>; the ingress panel is /<slug>):
+  /local_discord_pb -> title "Discord Archive – Home Assistant"
+  iframe src …/hassio_ingress/<token>/panel.html  inner: complete:"406 messages in 4 channels"
+
+Rooms view /api/hassio_ingress/<token>/simple.html (cookie created by the panel above):
+  status "0 messages in #general"
+  guilds (12): Arthur Visions, Cat Lab & Co, Cat Lab X, dryoungdo wellness clinic,
+    HUMAN SCHOOL | buildwithoracle.com, Mini lab, nat's ARRA Oracles, nat's August 2026,
+    Oracle School🔮 | school.buildwithoracle.com, Phd Oracle, Soul Brews - Brewing for Life, ฝ่ายบัญชีเคอิชู
+  room rows 513, rail buttons 13 (12 servers + Servers), heading "# general"
+  close first server  -> aria-expanded=false
+  hide first server   -> guilds 11, "Hidden servers (1)", rail 12
+  show it back        -> guilds 12
+  collapse category "Text Channels" (9 rooms) -> aria-expanded=false
+  Servers dialog      -> 12 rows, first "Arthur Visions 10 404 ↑↓"
+  GET api/dc/sidebar after the clicks -> 200, guilds 12, channels 559, with category_id 254,
+    prefs {"collapsed":{"1501389911272718426":false},"hidden":[],"open":{"1501389910530064497":true},"order":[]}
+    model_error null   (preferences persisted on the box, not in the browser)
+  rail pick "Arthur Visions" -> heading "# general", "Arthur Visions · 1501389911272718428"
+  ?guild=<first id>   -> 1 server shown, title "Arthur Visions", "All servers" link present
+
+Home Assistant sidebar entry (tools/ha-sidebar.ts pin 1501389910530064497):
+  dashboard dc-1501389910530064497 "Arthur Visions", iframe strategy ->
+    …/hassio_ingress/<token>/simple.html?guild=1501389910530064497
+  /dc-1501389910530064497 -> title "Arthur Visions – Home Assistant"
+  iframe inner: complete | rail + "Arthur Visions" + "All servers" | guilds=1 | h1="# general"
+
+API through real ingress (bun tools/ha-sidebar.ts … servers):
+  12 servers, all "open"; Arthur Visions 404 msgs, Soul Brews - Brewing for Life 2 msgs, others 0.

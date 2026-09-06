@@ -36,6 +36,15 @@ def options(path):
     return data
 
 
+def consume_marker(path):
+    """Remove a request marker and report whether it existed, in one step."""
+    try:
+        Path(path).unlink()
+        return True
+    except FileNotFoundError:
+        return False
+
+
 def write_job(path, state, started_at=None):
     value = {"state": state, "started_at": started_at}
     if state in ("succeeded", "failed", "idle"):
@@ -112,9 +121,11 @@ def main():
             if pb.poll() is not None:
                 raise RuntimeError("PocketBase exited unexpectedly")
             if (time.monotonic() >= due or request_path.exists() or channel_request_path.exists()) and worker is None:
-                requested_only = time.monotonic() < due and not request_path.exists()
-                request_path.unlink(missing_ok=True)
-                channel_request_path.unlink(missing_ok=True)
+                # Consume the markers atomically: a full-run request written between
+                # an exists() check and the unlink would otherwise be deleted unseen.
+                full_request = consume_marker(request_path)
+                consume_marker(channel_request_path)
+                requested_only = time.monotonic() < due and not full_request
                 if env["DISCORD_PB_BACKFILL_READY"] != "true":
                     write_job(job_path, "idle")
                     due = time.monotonic() + config.get("poll_minutes", 60) * 60
@@ -147,6 +158,9 @@ if __name__ == "__main__":
     try:
         main()
     except (ValueError, RuntimeError, OSError) as error:
-        # Do not dump options, credentials or arbitrary exception bodies.
-        print(f"discord_pb service failed: {type(error).__name__}", file=sys.stderr)
+        # ValueError/RuntimeError messages are this file's own hand-written
+        # sentences (never option values); OSError bodies may name paths, so only
+        # the class is printed for those.
+        detail = f": {error}" if isinstance(error, (ValueError, RuntimeError)) else ""
+        print(f"discord_pb service failed: {type(error).__name__}{detail}", file=sys.stderr)
         sys.exit(1)

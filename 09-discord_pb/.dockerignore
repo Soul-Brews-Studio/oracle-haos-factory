@@ -16,3 +16,4 @@
 !gateway_ws.py
 !rootfs/
 !rootfs/**
+!ha_admins.py

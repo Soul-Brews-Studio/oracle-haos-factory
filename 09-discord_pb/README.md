@@ -34,10 +34,15 @@ not cause fallback to another service’s secrets.
   pair for manual login rather than trying to recover that generated password.
 - `auto_login`: **false by default**. When true, the sidebar dashboard signs in only via trusted ingress
   and an allowed HA user. “Open PocketBase admin” reuses that session.
-- `auto_login_ha_admins`: **false by default**. When true, any user admitted
-  to this `panel_admin: true` ingress panel may auto-login. Supervisor does not
-  send an admin boolean header; this option deliberately relies on HA's panel
-  admin gate, in addition to the add-on's ingress peer/path checks.
+- `auto_login_ha_admins`: **false by default**. When true, HA **administrators**
+  may auto-login. `panel_admin: true` is *not* the gate: it only hides the
+  sidebar entry, while every HA user can mint an ingress session and reach this
+  add-on with a real `X-Remote-User-Id` (measured against HA core and
+  Supervisor source, 2026-09-07). So the add-on asks HA core itself who the
+  administrators are: `ha_admins.py` (needs `homeassistant_api: true`) reads
+  `config/auth/list` through Supervisor every 5 minutes and writes owner and
+  `system-admin` user ids to `/run/discord-pb/ha-admins.json`; the hook denies
+  when the file is missing, older than 15 minutes, or does not list the user.
 - `auto_login_ha_user_ids`: comma-separated HA user IDs allowed superuser access;
   default empty (deny). A denied panel shows the received HA user ID/name, a copy
   button, and the exact option name so an administrator can configure it.
@@ -159,6 +164,46 @@ Zero-count or malformed HTTP success bodies cannot produce a false green.
   [JS migrations](https://pocketbase.io/docs/js-migrations/),
   [HA ingress](https://developers.home-assistant.io/docs/apps/presentation/),
   [HA ingress identity](https://developers.home-assistant.io/docs/apps/security/).
+
+## Server-by-server sidebar (v0.2.0)
+
+The rooms view now builds its sidebar the way the backfill discovers Discord:
+**server → category → channel → thread**, one section per server, from the
+archive itself (`discord_entities` + message counts), not from a hand-written
+list. Every server can be **opened or closed** (chevron, or the Servers dialog)
+and **hidden or shown** (⊘ on the section, "Hidden servers" at the bottom, or
+the Sidebar checkbox in the dialog); categories collapse; servers can be
+reordered. Choices persist **on the box**, shared by every HA user of the
+add-on, in `dc_settings` under key `sidebar` — no browser storage is trusted.
+
+- `GET /api/dc/sidebar` (superuser): `guilds[]` with counts and their
+  open/hidden state, `channels[]` with `category_id` (Discord type 4 parent,
+  read from `raw.parent_id`) and `position`, `prefs`, and `model_error` when
+  `dc.config.yaml` fails validation (the checkbox table is used for `selected`
+  in that case, and the error is reported rather than hidden).
+- `POST /api/dc/sidebar` (superuser): a patch — `hide`/`show` (lists), `hidden`
+  or `order` (replace), `open`/`collapsed` (per-id booleans). Only snowflakes
+  are accepted, at most 500 ids per key, and only guilds the archive knows can
+  be hidden or ordered. Malformed input answers 400 and stores nothing.
+- `simple.html?guild=<id or name>` focuses one server (the others stay in the
+  rail; "All servers" returns). This is what the HA sidebar entries open.
+
+**Home Assistant sidebar, one entry per server.** `tools/ha-sidebar.ts` mirrors
+the archive's servers into HA using the dashboard API the Settings page itself
+uses: each server becomes a storage dashboard `dc-<guild id>` whose config is
+the `iframe` strategy pointing at this add-on's ingress entry with `?guild=`.
+`just sidebar-sync` pins every open server and hides the hidden ones (via
+`show_in_sidebar`); `sidebar-pin`, `sidebar-hide`, `sidebar-show`,
+`sidebar-unpin` and `sidebar-list` do one at a time. It never touches
+dashboards it did not create.
+
+Ingress caveat, measured on HA 2026.8.3: an iframe under `/api/hassio_ingress/`
+is served only while the browser holds a live `ingress_session` cookie. HA
+creates that cookie when any add-on panel is opened and it lasts 15 minutes
+after the last validation; the embedded rooms view then re-validates it every
+60 s through the parent frame's `hass` while it is open (`keepIngressAlive`).
+So open **Discord Archive** once per session, then the per-server entries work;
+a `401: Unauthorized` inside a pinned entry means "open the main panel again".
 
 ## Simple rooms view (v0.1.10)
 
@@ -335,7 +380,9 @@ CommonJS build for JSVM's non-async runtime. No maw plugin is included.
 ### Upgrade gate (not executed)
 
 ```bash
-SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+# Run from the checkout you are actually shipping; the justfile does the same
+# rsync + update/rebuild + running-version check:  just deploy
+SRC="$(git rev-parse --show-toplevel)/09-discord_pb"
 rsync -az --exclude proof-local/ --exclude __pycache__/ \
   "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
 ssh kvmlab1.oracle.netbird \
@@ -448,7 +495,9 @@ existing `bot_token`, credentials and autologin choices. Example **options patch
 ```
 
 ```bash
-SRC="$HOME/.local/state/incubate/worktrees/Soul-Brews-Studio/oracle-haos-factory/01-discord-pb-kvmlab1/09-discord_pb"
+# Run from the checkout you are actually shipping; the justfile does the same
+# rsync + update/rebuild + running-version check:  just deploy
+SRC="$(git rev-parse --show-toplevel)/09-discord_pb"
 rsync -az --exclude proof-local/ --exclude __pycache__/ \
   "$SRC/" kvmlab1.oracle.netbird:/addons/discord_pb/
 ssh kvmlab1.oracle.netbird \

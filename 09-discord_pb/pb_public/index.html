@@ -51,9 +51,12 @@
 document.getElementById('entity-find').addEventListener('submit', async (event) => {
   event.preventDefault();
   const name=document.getElementById('entity-name').value.trim();
-  const response=await fetch('./api/discord/entities/'+encodeURIComponent(name), {cache:'no-store'});
+  const saved=JSON.parse(localStorage.getItem('__dc_superuser_auth__')||'{}');
+  const response=await fetch('./api/discord/entities/'+encodeURIComponent(name), {cache:'no-store', headers: saved.token ? {Authorization: saved.token} : {}});
   const data=await response.json();
-  document.getElementById('entity-result').textContent=data.matches?.length
+  document.getElementById('entity-result').textContent=!response.ok
+    ? (response.status===401 ? 'Sign in first: name lookup needs the archive session.' : (data.error||data.message||('Lookup failed: '+response.status)))
+    : data.matches?.length
     ? data.matches.map(row => `${row.kind}: ${row.name} — ${row.entity_id}`).join('\n')
     : 'No exact name found';
 });
