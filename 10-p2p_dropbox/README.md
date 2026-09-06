@@ -4,9 +4,29 @@ Self-contained Bun 1.3.14 + Hono HTTP/WS server, werift receiver and vendored
 React UI. Two s6 services, one published TCP port (3847), no Cloudflare runtime.
 New directory `10-p2p_dropbox`, slug `p2p_dropbox`; existing add-ons are untouched.
 
-**Lab status: local build/test proof only. STOP before Supervisor installation on
-kvmlab1. Nat must choose and set the deployment auth key through add-on options.**
-See [PROOF.md](PROOF.md) for exact validation and network limitations.
+**Lab status (lead-reported, 2026-09-06): installed on kvmlab1 as
+`local_p2p_dropbox` v0.1.0 and started.** The lead verified live ingress, the
+401/200 auth gate, and real m5 HTTP (1.5 MB) and CLI WebRTC (2.5 MB) transfers
+with matching SHA-256 at both ends and a receiver ledger entry. These deployment
+results were reported by the lead, not independently rerun by this branch agent.
+Nat manages the deployment auth key through add-on options; never commit it.
+See [PROOF.md](PROOF.md) for historical local evidence and browser P2P/TURN gaps.
+
+## Register a new local add-on
+
+After copying `10-p2p_dropbox/` to `/addons/p2p_dropbox` on the authorized HAOS
+host, **`ha store reload` is required to register a new local add-on**:
+
+```sh
+ha store reload
+```
+
+`ha addons reload` alone did not register this app on kvmlab1. Wait for the store
+reload to finish and confirm `local_p2p_dropbox` is listed before installing.
+Keep `build.yaml` image references as plain per-architecture version tags and
+the Dockerfile `BUILD_FROM` default as a plain tag. Keep the empty-default auth
+and TURN schema fields optional (`password?` / `str?`); startup still rejects an
+empty auth key. See [DOCS.md](DOCS.md) for operational notes.
 
 ## Options Nat must set
 
