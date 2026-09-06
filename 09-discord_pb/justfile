@@ -10,6 +10,7 @@ verify:
     node tests/test_timeline.js
     node tests/test_time.js
     node tests/test_import_activity.js
+    node tests/test_simple_tree.js
     bun test sdk/dc.test.ts
     tsc --noEmit --strict --target ES2020 --module ESNext --moduleResolution bundler sdk/dc.ts
     for file in pb_hooks/*.js pb_hooks/lib/*.js pb_migrations/*.js pb_public/*.js; do node --check "$file"; done

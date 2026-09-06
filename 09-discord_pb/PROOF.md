@@ -1,3 +1,22 @@
+# v0.1.10 — additive simple rooms reader (2026-09-06)
+
+Scope: `09-discord_pb/` on `lab/01-discord-pb-kvmlab1`. **Local-only; STOP before deployment.**
+No kvmlab1 service, options, source, or tokens changed.
+
+```text
+simple tree tests passed
+Node syntax: simple.js + simple-tree.js PASS
+Shell syntax + git diff --check: PASS
+Impeccable detector: PASS (degraded parser mode; no findings)
+Docker linux/amd64 image build: PASS (discord-pb:simple-ui)
+```
+
+The new `/simple.html` is React 18.3.1 + Tailwind 3.4.17, vendored locally under
+`pb_public/vendor/` with license headers so HA ingress does not depend on a public CDN. It preserves
+`panel.html`, shares only this add-on's existing `__dc_superuser_auth__` session key, and reads its
+room tree from the authenticated `/api/dc/channels` API. The tree has guild → channel → thread nesting,
+room selection, mobile drawer navigation, and a ground-truth stored-message coverage table.
+
 # v0.1.9 — Bangkok timestamps and archive timelines (2026-09-06)
 
 Scope: `09-discord_pb/` on `lab/01-discord-pb-kvmlab1`. **Local verification;

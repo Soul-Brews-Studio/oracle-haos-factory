@@ -160,6 +160,13 @@ Zero-count or malformed HTTP success bodies cannot produce a false green.
   [HA ingress](https://developers.home-assistant.io/docs/apps/presentation/),
   [HA ingress identity](https://developers.home-assistant.io/docs/apps/security/).
 
+## Simple rooms view (v0.1.10)
+
+`/simple.html` is an additive React + Tailwind reader for the existing archive. It deliberately
+leaves the operational dashboard intact: the same HA-ingress admin mint and the same add-on-local
+PocketBase session are reused, then guild → channel → thread navigation appears on the left and the
+selected room opens on the right. The left rail also has a collapsible **Ground truth / backfill coverage** table: its counts are the stored PocketBase facts for each discovered room, not a guessed Discord total. It uses only relative URLs, so it works under the HA ingress path.
+
 ## Sidebar and import API (v0.1.4)
 
 HA ingress opens `/panel.html`: recent private messages with names/IDs,
