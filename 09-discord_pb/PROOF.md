@@ -217,3 +217,12 @@ These are local fixtures, not proof of live Discord backfill. At deployment
 preflight kvmlab1 had no bot_token, channels, or guilds configured and zero
 messages. Deployment does not inject synthetic messages, alter options, or
 borrow credentials from another add-on.
+
+### Authorized live deployment follow-up
+
+Supervisor successfully started v0.1.4 with unchanged options; health, panel
+HTML/JS/CSS and status returned 200. Guest import and backfill POSTs returned
+401. The live archive remains zero messages (no token/targets configured).
+Supervisor's reported ingress_url exposed a doubled slash: it joins its ingress
+base with ingress_entry itself. v0.1.5 changes the entry to relative
+`panel.html`, avoiding a prefix-losing redirect. No message schema change.

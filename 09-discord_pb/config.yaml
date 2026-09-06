@@ -1,5 +1,5 @@
 name: "Discord PocketBase"
-version: "0.1.4"
+version: "0.1.5"
 slug: "discord_pb"
 description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/01-discord-pb-kvmlab1/09-discord_pb"
@@ -12,7 +12,7 @@ homeassistant_api: false
 host_network: false
 ingress: true
 ingress_port: 8110
-ingress_entry: /panel.html
+ingress_entry: panel.html
 panel_icon: mdi:message-text-clock
 panel_title: "Discord Archive"
 panel_admin: true
