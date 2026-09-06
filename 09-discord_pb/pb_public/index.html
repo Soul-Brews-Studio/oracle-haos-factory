@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>Discord Archive</title>
+<style>body{font:16px system-ui;max-width:48rem;margin:3rem auto;padding:1rem;color:#18212b}button{padding:.7rem 1rem}</style>
+<h1>Discord Archive</h1><p id="status">Loading…</p>
+<p><a href="/_/">Open PocketBase admin</a> <button id="login">Open admin with auto-login</button></p>
+<script>
+fetch('./api/discord/status').then(r=>r.json()).then(x=>status.textContent=`${x.total} messages in ${x.channels.length} channels`).catch(e=>status.textContent=e)
+login.onclick=async()=>{const r=await fetch('./api/discord/admin-token');const x=await r.json();if(!r.ok)return alert(x.error);localStorage.setItem(x.key,JSON.stringify({token:x.token,record:x.record}));location.href='./_/'}
+</script>
