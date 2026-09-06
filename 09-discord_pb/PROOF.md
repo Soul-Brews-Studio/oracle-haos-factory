@@ -23,8 +23,8 @@ PANEL PROOF PASS: liveCreate=true, liveUpdate=true, liveTombstone=true
   `live:false` publishes fresh disabled status while PB/poller continue normally.
 - Token-free fake HTTP `/gateway/bot` + real WebSocket HELLO/IDENTIFY/READY,
   independent heartbeat/ACK, disconnect and accepted-sequence RESUME. Unit
-  cases additionally cover missing ACK, partial frame timeout, aggregate frame
-  bounds, saturated queue/no sequence hole, invalid-session queued-READY race,
+  cases additionally cover missing ACK, partial frame timeout,
+  saturated queue/no sequence hole, invalid-session queued-READY race,
   fatal closes, identify quota, bootstrap retry and fixture-token rejection.
 - The listener calls **actual PB JSVM** ingestion under the effective YAML model.
   Selected create/partial edit/delete are stored; an unselected thread message
