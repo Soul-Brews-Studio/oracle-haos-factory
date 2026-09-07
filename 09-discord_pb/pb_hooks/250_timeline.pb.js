@@ -56,7 +56,8 @@ routerAdd("GET", "/api/dc/timeline", (e) => {
     // inside that slice ride along with this page; nothing outside it does.
     const sliceUpper = input.cursor ? input.cursor.ts : input.before
     const sliceLower = hasMore && oldestMessage ? oldestMessage.ts : input.since
-    const inSlice = (ev) => ev && events.inWindow(ev.ts, sliceLower, sliceUpper) && (!input.guilds.length || input.guilds.indexOf(ev.guild_id) >= 0)
+    // Same guild and text filters as the messages SQL, so the counts agree.
+    const inSlice = (ev) => ev && events.inWindow(ev.ts, sliceLower, sliceUpper) && (!input.guilds.length || input.guilds.indexOf(ev.guild_id) >= 0) && events.textMatches(ev, input.q)
 
     // Threads and imports are few (hundreds at most); their timestamps are ISO
     // text from Discord, not PocketBase date columns, so they are read whole and

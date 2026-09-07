@@ -47,6 +47,10 @@ assert.equal(ev.inWindow('2026-09-07T00:00:00.000Z', '2026-09-06T00:00:00.000Z',
 assert.equal(ev.inWindow('2026-09-08T00:00:00.000Z', null, '2026-09-08T00:00:00.000Z'), false, 'before is exclusive');
 assert.equal(ev.inWindow('2026-09-06T00:00:00.000Z', '2026-09-06T00:00:00.000Z', null), true, 'since is inclusive');
 assert.equal(ev.inWindow(null, null, null), false);
+assert.equal(ev.textMatches(i, 'MAWJS'), true, 'text match is case-insensitive');
+assert.equal(ev.textMatches(i, 'backFILL'), true, 'author counts too');
+assert.equal(ev.textMatches(i, 'nothing'), false);
+assert.equal(ev.textMatches(i, ''), true);
 
 // mergeEvents: newest first, dedupe by key, stable ties
 const merged = ev.mergeEvents([[m, {...m}], t, [i]]);

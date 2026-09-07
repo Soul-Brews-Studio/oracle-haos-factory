@@ -23,3 +23,14 @@ a thread created 01:30 and archived 02:30, an import marker 01:15.
 Unit: tests/test_events.js (validateQuery incl. cursor/window checks, snowflakeTime exact vs BigInt,
 threadEvents created+archived, importEvent key/label, mergeSorted, matches with guilds null/[] and before,
 gatewayLabel) + node --check on every file + bun build of tools/ha-sidebar.ts.
+
+Live on kvmlab1 after `just deploy` (0.3.1 started, 07:04 +07):
+  `just sidebar-sync` → no "stale dc-timeline" line (reserved entry skipped)
+  full keyset walk of every message page through real ingress (limit=50):
+    pages=9 rows=406 unique=406 dupes=0 monotonic_desc=true ended=has_more=false ; archive total messages: 406
+  browser, window=all: page 1 "275 events · 12 of 12 servers · all", 36 day headers
+    Older ×3 → 390 / 498 / 605 rows, all unique, timestamps monotonic, day headers unique (41/43/43),
+    messages 200 / 300 / 400 (100 per page, 406 total)
+    "none" chip → "No servers selected", 0 rows ; "all servers" → 275 rows again
+    search "cctv" → rows filtered client-side (47); server-side text filter for threads/imports added in 0.3.2
+    so the status count and the rows agree

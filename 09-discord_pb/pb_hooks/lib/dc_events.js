@@ -150,6 +150,14 @@ function importEvent(entityId, at, entity) {
   }
 }
 
+// The same text match the SQL applies to messages (content or author,
+// case-insensitive substring), for the kinds that are filtered in JS.
+function textMatches(event, search) {
+  const q = text(search).toLowerCase()
+  if (!q) return true
+  return ((event.text || "") + " " + (event.author || "")).toLowerCase().indexOf(q) >= 0
+}
+
 function inWindow(ts, since, before) {
   if (!ts) return false
   if (since && ts < since) return false
@@ -172,5 +180,5 @@ function mergeEvents(lists) {
 
 module.exports = Object.freeze({
   SNOWFLAKE, KINDS, MAX_LIMIT, DEFAULT_LIMIT, MAX_GUILDS, MAX_QUERY, DISCORD_EPOCH,
-  apiError, pbDate, isoOrNull, snowflakeTime, validateQuery, likePattern, cursorOf, messageEvent, threadEvents, importEvent, inWindow, mergeEvents,
+  apiError, pbDate, isoOrNull, snowflakeTime, validateQuery, likePattern, cursorOf, messageEvent, threadEvents, importEvent, textMatches, inWindow, mergeEvents,
 })
