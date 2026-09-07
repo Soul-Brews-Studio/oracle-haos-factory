@@ -36,6 +36,15 @@ def options(path):
     return data
 
 
+def hooks_pool(value, default=4):
+    """Goja runtime pool size for hooks: an integer 1..15, else the default."""
+    try:
+        size = int(str(value).strip()) if value not in (None, "") else default
+    except ValueError:
+        return default
+    return size if 1 <= size <= 15 else default
+
+
 def consume_marker(path):
     """Remove a request marker and report whether it existed, in one step."""
     try:
@@ -80,7 +89,13 @@ def main():
     Path("/data/pb_data").mkdir(exist_ok=True)
     pb = subprocess.Popen(["/pb/pocketbase", "serve", "--http=0.0.0.0:8110", "--dir=/data/pb_data",
         "--hooksDir=/pb/pb_hooks", "--migrationsDir=/pb/pb_migrations", "--publicDir=/pb/pb_public",
-        "--hooksWatch=false"], env=env)
+        "--hooksWatch=false",
+        # PocketBase prewarms 15 goja runtimes for hooks by default; each holds
+        # the required lib modules, and under a bulk backfill + selection burst
+        # RSS reached ~300 MB and the 2 GB kvmlab1 guest OOM-killed the process
+        # twice (2026-09-07 01:04Z, 01:10Z). A small pool caps that; hooks are
+        # short and mostly serialized by SQLite anyway.
+        f"--hooksPool={hooks_pool(os.environ.get('DISCORD_PB_HOOKS_POOL'))}"], env=env)
     job_path = Path("/data/backfill-job.json")
     request_path = Path("/data/backfill-request")
     channel_request_path = Path("/data/dc-import-request")

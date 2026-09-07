@@ -1,5 +1,5 @@
 name: "Discord PocketBase"
-version: "0.3.2"
+version: "0.3.3"
 slug: "discord_pb"
 description: "Self-contained Discord archive with PocketBase admin and idempotent REST backfill."
 url: "https://github.com/Soul-Brews-Studio/oracle-haos-factory/tree/lab/03-discord-sidebar-kvmlab1/09-discord_pb"
