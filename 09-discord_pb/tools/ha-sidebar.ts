@@ -10,11 +10,13 @@
  *   bun tools/ha-sidebar.ts ... servers                 # what the add-on knows (via ingress)
  *   bun tools/ha-sidebar.ts ... pin GUILD_ID [TITLE]    # add one server to the HA sidebar
  *   bun tools/ha-sidebar.ts ... sync                    # pin every open server, hide hidden ones
+ *   bun tools/ha-sidebar.ts ... pin-timeline [TITLE]   # the central timeline as dc-timeline
  *   bun tools/ha-sidebar.ts ... hide URL_PATH | show URL_PATH | unpin URL_PATH
  *
  * The credential is read from --pass-file only; it never appears in argv.
  * Dashboards created here use url_path "dc-<guild id>" so sync can find them
- * again and never touches dashboards it did not create.
+ * again and never touches dashboards it did not create. "dc-timeline" is the
+ * one non-server dc-* entry; sync skips it.
  *
  * Ingress caveat, measured 2026-09-07 on HA 2026.8.3: an iframe under
  * /api/hassio_ingress/... is served only while the browser holds a live
@@ -34,6 +36,8 @@ const positional = argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[
 const [command = "list", ...rest] = positional;
 const SLUG = flag("slug") ?? "local_discord_pb";
 const PREFIX = "dc-";
+// dc-* paths that are not "one server": sync leaves them alone.
+const RESERVED = new Set([`${PREFIX}timeline`]);
 
 const ip = need("ip"), user = need("user");
 const pass = ((): string => {
@@ -161,7 +165,7 @@ async function main() {
         if (g.hidden) { if (d?.show_in_sidebar) await setVisible(url_path, false); else console.log(`  · skip    ${url_path.padEnd(26)} ${g.name} (hidden in the add-on)`); continue; }
         await pin(g.id, g.name);
       }
-      for (const d of have) if (!all.some((g) => `${PREFIX}${g.id}` === d.url_path)) console.log(`  ! stale   ${d.url_path} is pinned but no longer in the archive — unpin it if you want`);
+      for (const d of have) if (!RESERVED.has(d.url_path) && !all.some((g) => `${PREFIX}${g.id}` === d.url_path)) console.log(`  ! stale   ${d.url_path} is pinned but no longer in the archive — unpin it if you want`);
       break;
     }
     case "pin-timeline": {

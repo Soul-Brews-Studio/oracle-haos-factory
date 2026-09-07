@@ -1,0 +1,25 @@
+discord_pb 0.3.1 — timeline review fixes, local proof (PocketBase 0.29.3 with the hooks, m5), 2026-09-07 07:0x +07
+
+Adversarial review of 0.3.0 (3 lenses, 41 agents, 19 findings, 16 confirmed) → all addressed:
+  keyset cursor `cursor=<ts>|<message id>` (rows strictly older than the tuple); `before` is a pure window bound
+  for every kind; threads/imports clipped to the page's time slice; `thread archived` at archive_timestamp and
+  `thread created` falling back to the snowflake time; import rows keyed by entity and labelled "last import of";
+  client: request sequencing + abort, debounced search, live rows honour window/servers/kinds/text, SSE held across
+  filter changes with a fresh token per connect, pages merged sorted, explicit empty server selection = empty
+  state, gateway strip shows off / error text; sidebar sync skips dc-timeline.
+
+Seed: 3 messages in ONE millisecond (ids …009 …008 …007 at 02:00:00.000Z), one older (01:00), one newer (03:00),
+a thread created 01:30 and archived 02:30, an import marker 01:15.
+
+  page 1 limit=2 → newest(03:00), thread archived(02:30), …009 ; has_more true ; slice since=02:00
+    next_cursor 2026-09-07T02:00:00.000Z|1500000000000000009
+  page 2 cursor  → …008, …007 (same millisecond as the cursor row — not skipped) ; slice [02:00, 02:00)
+    next_cursor 2026-09-07T02:00:00.000Z|1500000000000000007
+  page 3 cursor  → thread created(01:30), last import(01:15), older(01:00) ; has_more false
+  union of pages = every message exactly once, dupes: 0 ; every page chronological on its own
+  before=02:30 with no cursor → …009 …008 …007 + thread created + import + older, system present
+  cursor=junk → 400 "cursor must be <ISO timestamp>|<message id> from next_cursor"
+
+Unit: tests/test_events.js (validateQuery incl. cursor/window checks, snowflakeTime exact vs BigInt,
+threadEvents created+archived, importEvent key/label, mergeSorted, matches with guilds null/[] and before,
+gatewayLabel) + node --check on every file + bun build of tools/ha-sidebar.ts.

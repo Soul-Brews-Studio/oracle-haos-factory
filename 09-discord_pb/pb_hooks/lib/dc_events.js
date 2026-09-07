@@ -4,6 +4,11 @@
 //   { key, kind, ts, guild_id, guild, channel_id, channel, thread_id, thread,
 //     category, author_id, author, bot, text, edited, deleted, attachments,
 //     reply_to, message_id, entity_id }
+//
+// Paging: `since`/`before` are the time WINDOW (both optional, before
+// exclusive) and apply to every kind. `cursor` ("<iso ts>|<message id>") is the
+// keyset cursor for the next page of messages: rows strictly older than the
+// (ts, id) tuple, so messages sharing the boundary millisecond are not lost.
 
 const SNOWFLAKE = /^\d{17,20}$/
 const KINDS = Object.freeze(["message", "thread", "import"])
@@ -11,6 +16,7 @@ const MAX_LIMIT = 200
 const DEFAULT_LIMIT = 100
 const MAX_GUILDS = 50
 const MAX_QUERY = 120
+const DISCORD_EPOCH = 1420070400000
 
 function apiError(status, message) {
   const error = new Error(message)
@@ -30,21 +36,39 @@ function isoOrNull(value) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null
 }
 
+// Creation instant encoded in a Discord snowflake (ms since the Discord epoch).
+function snowflakeTime(id) {
+  const raw = text(id)
+  if (!SNOWFLAKE.test(raw)) return null
+  // 64-bit id >> 22 without BigInt (goja has no BigInt): drop the low 22 bits.
+  const ms = Math.floor(Number(raw) / 4194304) + DISCORD_EPOCH
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null
+}
+
+function parseIso(value, key) {
+  const raw = text(value)
+  const parsed = Date.parse(raw)
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(raw) || !Number.isFinite(parsed)) throw apiError(400, `${key} must be an ISO timestamp`)
+  return new Date(parsed).toISOString()
+}
+
 function validateQuery(query) {
   const q = query || {}
   const rawLimit = text(q.limit || String(DEFAULT_LIMIT))
   if (!/^\d+$/.test(rawLimit)) throw apiError(400, `limit must be an integer from 1 to ${MAX_LIMIT}`)
   const limit = Number(rawLimit)
   if (limit < 1 || limit > MAX_LIMIT) throw apiError(400, `limit must be an integer from 1 to ${MAX_LIMIT}`)
-  const result = { limit, since: null, before: null, guilds: [], kinds: KINDS.slice(), q: "" }
-  for (const key of ["since", "before"]) {
-    const value = text(q[key])
-    if (!value) continue
-    const parsed = Date.parse(value)
-    if (!/^\d{4}-\d{2}-\d{2}T/.test(value) || !Number.isFinite(parsed)) throw apiError(400, `${key} must be an ISO timestamp`)
-    result[key] = new Date(parsed).toISOString()
-  }
+  const result = { limit, since: null, before: null, cursor: null, guilds: [], kinds: KINDS.slice(), q: "" }
+  for (const key of ["since", "before"]) if (text(q[key])) result[key] = parseIso(q[key], key)
   if (result.since && result.before && result.since >= result.before) throw apiError(400, "since must be earlier than before")
+  const cursor = text(q.cursor)
+  if (cursor) {
+    const parts = cursor.split("|")
+    if (parts.length !== 2 || !SNOWFLAKE.test(parts[1])) throw apiError(400, "cursor must be <ISO timestamp>|<message id> from next_cursor")
+    result.cursor = { ts: parseIso(parts[0], "cursor"), id: parts[1] }
+    if (result.before && result.cursor.ts >= result.before) throw apiError(400, "cursor must lie inside the window")
+    if (result.since && result.cursor.ts < result.since) throw apiError(400, "cursor must lie inside the window")
+  }
   const guilds = text(q.guilds)
   if (guilds) {
     const ids = guilds.split(",").map(text).filter(Boolean)
@@ -69,6 +93,10 @@ function likePattern(search) {
   return "%" + String(search).replace(/[\\%_]/g, (c) => "\\" + c) + "%"
 }
 
+function cursorOf(event) {
+  return event && event.ts && event.message_id ? `${event.ts}|${event.message_id}` : null
+}
+
 function messageEvent(row) {
   const ts = isoOrNull(row.ts)
   return {
@@ -85,32 +113,38 @@ function messageEvent(row) {
   }
 }
 
-function threadEvent(row) {
-  const ts = isoOrNull(row.created)
-  if (!ts) return null
-  return {
-    key: "t:" + row.entity_id, kind: "thread", ts,
+// A thread yields up to two events: created (create_timestamp, or the
+// snowflake's time for threads older than Discord's 2022-01-09 field) and,
+// when archived, archived at archive_timestamp.
+function threadEvents(row) {
+  const base = {
     guild_id: text(row.guild_id) || null, guild: text(row.guild) || null,
     channel_id: text(row.parent_id) || null, channel: text(row.channel) || null,
     thread_id: text(row.entity_id), thread: text(row.name) || null, category: null,
     author_id: text(row.owner_id) || null, author: null, bot: false,
-    text: (row.archived ? "thread archived: " : "thread created: ") + text(row.name),
-    edited: false, deleted: false, attachments: 0, reply_to: null,
-    message_id: null, entity_id: text(row.entity_id),
+    edited: false, deleted: false, attachments: 0, reply_to: null, message_id: null, entity_id: text(row.entity_id),
   }
+  const out = []
+  const created = isoOrNull(row.created) || snowflakeTime(row.entity_id)
+  if (created) out.push(Object.assign({ key: "t:" + row.entity_id, kind: "thread", ts: created, text: "thread created: " + text(row.name) }, base))
+  const archived = row.archived ? isoOrNull(row.archived_at) : null
+  if (archived) out.push(Object.assign({ key: "ta:" + row.entity_id, kind: "thread", ts: archived, text: "thread archived: " + text(row.name) }, base))
+  return out
 }
 
+// The import marker is "last import at" for an entity (markImports overwrites
+// it on every batch), so the event is keyed by entity, not by time, and says so.
 function importEvent(entityId, at, entity) {
   const ts = isoOrNull(at)
   if (!ts) return null
   const e = entity || {}
   return {
-    key: "i:" + entityId + ":" + ts, kind: "import", ts,
+    key: "i:" + entityId, kind: "import", ts,
     guild_id: e.guild_id || null, guild: e.guild || null,
     channel_id: e.kind === "thread" ? (e.parent_id || null) : entityId, channel: e.kind === "thread" ? (e.parent || null) : (e.name || null),
     thread_id: e.kind === "thread" ? entityId : null, thread: e.kind === "thread" ? (e.name || null) : null, category: null,
     author_id: null, author: "backfill", bot: true,
-    text: "import completed for " + (e.name ? e.name : entityId),
+    text: "last import of " + (e.name ? e.name : entityId),
     edited: false, deleted: false, attachments: 0, reply_to: null,
     message_id: null, entity_id: entityId,
   }
@@ -137,6 +171,6 @@ function mergeEvents(lists) {
 }
 
 module.exports = Object.freeze({
-  SNOWFLAKE, KINDS, MAX_LIMIT, DEFAULT_LIMIT, MAX_GUILDS, MAX_QUERY,
-  apiError, pbDate, isoOrNull, validateQuery, likePattern, messageEvent, threadEvent, importEvent, inWindow, mergeEvents,
+  SNOWFLAKE, KINDS, MAX_LIMIT, DEFAULT_LIMIT, MAX_GUILDS, MAX_QUERY, DISCORD_EPOCH,
+  apiError, pbDate, isoOrNull, snowflakeTime, validateQuery, likePattern, cursorOf, messageEvent, threadEvents, importEvent, inWindow, mergeEvents,
 })

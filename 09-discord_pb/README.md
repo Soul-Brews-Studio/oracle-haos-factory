@@ -177,17 +177,27 @@ subscribes to PocketBase realtime on `discord_messages` and new, edited or
 deleted messages appear at the top without a reload, resolved to the same
 server/channel names as loaded rows.
 
-- `GET /api/dc/timeline` (superuser): `since`/`before` (ISO), `limit` (1–200),
-  `guilds` (comma list of ids, max 50), `kinds` (subset of
-  `message,thread,import`), `q` (text or author, max 120, LIKE-escaped).
-  Messages page with `before=<next_before>`; threads and imports ride along
-  with the first page of the window. Returns `events[]`, `next_before`,
-  `has_more`, `window`, `system`.
-- Filters: time window (1h, 24h, 7d, 30d, all), event kinds, free text, and
-  server chips seeded from the sidebar's non-hidden servers.
+- `GET /api/dc/timeline` (superuser): `since`/`before` (ISO, the time window,
+  `before` exclusive, applied to every kind), `limit` (1–200), `guilds` (comma
+  list of ids, max 50), `kinds` (subset of `message,thread,import`), `q` (text
+  or author, max 120, LIKE-escaped), `cursor` (`<ts>|<message id>` from
+  `next_cursor`, a keyset cursor: rows strictly older than that tuple, so
+  messages sharing a boundary millisecond are never skipped). Threads and
+  imports are clipped to the same slice of time as the page's messages
+  (`slice` in the response), so appended pages stay chronological. Returns
+  `events[]`, `has_more`, `next_cursor`, `slice`, `window`, `system` (first
+  page only).
+- Thread rows: `thread created` at `thread_metadata.create_timestamp` (or the
+  snowflake's time for pre-2022 threads) and, when archived, `thread archived`
+  at `archive_timestamp`. Import rows are the entity's **last** import marker
+  (`markImports` overwrites it), keyed by entity, and say "last import of".
+- Filters: time window (1h, 24h, 7d, 30d, all), event kinds, free text
+  (debounced), and server chips seeded from the sidebar's non-hidden servers;
+  "none" clears the selection and shows the empty state rather than everything.
+  Live rows honour the same window, servers, kinds and text.
 - `just sidebar-pin-timeline` puts it in the HA sidebar as `dc-timeline`
   (same iframe-strategy dashboard mechanism and the same ingress-cookie caveat
-  as the per-server entries).
+  as the per-server entries). `sidebar-sync` skips that one entry.
 
 ## Server-by-server sidebar (v0.2.0)
 
