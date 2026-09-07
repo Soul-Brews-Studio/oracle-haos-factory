@@ -129,6 +129,21 @@ set-option KEY VALUE:
     @just restart
     @just options
 
+# ── channel selection (what feeds the archive, the sidebar, and the timeline) ──
+
+select := "bun tools/dc-select.ts --ip " + box + " --user " + ha-user + " --pass-file " + ha-pw
+
+# Per server: selected / importable channels and archived messages.
+select-status: _ha
+    @{{select}} status
+
+# ⚠ Queues a backfill of every importable channel: just select-all all | just select-all "Mini lab"
+select-all TARGET="all": _ha
+    @{{select}} select-all "$1"
+
+select-none GUILD: _ha
+    @{{select}} deselect-all "$1"
+
 # ── Home Assistant sidebar (one entry per Discord server) ──────────────────────
 
 _ha:
