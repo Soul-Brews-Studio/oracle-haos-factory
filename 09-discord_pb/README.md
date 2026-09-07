@@ -9,6 +9,8 @@ Deployment is limited to the authorized `local_discord_pb` add-on on kvmlab1.
 Nat supplies the bot token through Supervisor options; missing credentials do
 not cause fallback to another service’s secrets.
 
+> Technical design (as built, 0.3.4): [docs/design.md](docs/design.md).
+
 ## Options and permissions
 
 - `bot_token` (`password?`): no default, read only from `/data/options.json`.
