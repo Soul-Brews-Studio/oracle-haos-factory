@@ -98,10 +98,15 @@ deploy: test push
         NOW=$(ssh "{{box}}" "ha apps info {{slug}}" | awk '/^version:/{print $2}')
         STATE=$(ssh "{{box}}" "ha apps info {{slug}}" | awk '/^state:/{print $2}')
         [ "$NOW" = "$WANT" ] && [ "$STATE" = "started" ] && { echo "→ running $NOW, state $STATE"; break; }
+        # The image is in place but the add-on was left stopped/error (an update
+        # from an error state does not start it): start it, then keep polling.
+        if [ "$NOW" = "$WANT" ] && [ "$STATE" != "started" ] && [ "$STATE" != "startup" ]; then
+            echo "→ $NOW installed, state $STATE: starting {{slug}}"
+            ssh "{{box}}" "ha apps start {{slug}}" | tail -1 || true
+        fi
         sleep 15
     done
-    [ "$NOW" = "$WANT" ] || { echo "✗ still on $NOW after 10 min — read: ssh {{box}} 'ha supervisor logs | grep discord'" >&2; exit 1; }
-    ssh "{{box}}" "ha apps start {{slug}}" >/dev/null 2>&1 || true
+    [ "$NOW" = "$WANT" ] && [ "$STATE" = "started" ] || { echo "✗ $NOW / $STATE after 10 min — read: ssh {{box}} 'ha apps logs {{slug}} | tail -20'" >&2; exit 1; }
     just status
 
 restart:
