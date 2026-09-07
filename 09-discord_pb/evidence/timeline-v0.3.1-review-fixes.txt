@@ -38,3 +38,10 @@ Live on kvmlab1 after `just deploy` (0.3.1 started, 07:04 +07):
 0.3.2 live (kvmlab1, 07:10 +07): text filter now applies to threads/imports server-side —
   q=cctv → 47 events {message 40, thread 6, import 1}, 0 not matching ; kinds=thread,import → 7 ; nonsense q → 0
   status count after Older now equals the rows shown
+
+Bulk selection + sweep on kvmlab1 (2026-09-07, after the guest was resized 2 GB → 4 GB on kvmbox-pve1):
+  `just select-all all` (final pass, 0.3.4): ✓ 324 changed, 401 already, 0 failed — selected 725 / 725 importable
+  (discovery keeps finding threads; importable grew 491 → 725 during the sweeps)
+  03:07:04Z messages=144611 channels_with_msgs=123 backfill=running live=on stored=465 ignored=0
+  Earlier, on 2 GB: kernel OOM-killed PocketBase twice (01:04Z, 01:10Z), box thrashed (swap full, load 28),
+  add-on stopped 08:44 +07 until the resize; 0.3.3 caps the hook runtime pool at 4, 0.3.4 adds message indexes.
