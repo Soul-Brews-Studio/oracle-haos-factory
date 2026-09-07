@@ -88,13 +88,21 @@ async function main() {
   const entry = info.ingress_entry;
   const session = (await ha.sup<{ session?: string }>("/ingress/session", "post"))?.session ?? die("could not open an ingress session");
   const cookie = { Cookie: `ingress_session=${session}` };
-  const auth = await fetch(`${base}${entry}/api/discord/admin-token`, { method: "POST", headers: cookie });
-  const body = await auth.json() as { token?: string; error?: string };
-  if (!auth.ok || !body.token) die(`add-on refused auto-login: ${body.error ?? auth.status}`);
-  const H = { ...cookie, Authorization: body.token, "Content-Type": "application/json" };
-  const api = async (path: string, init: RequestInit = {}) => {
-    const r = await fetch(`${base}${entry}/${path}`, { ...init, headers: { ...H, ...(init.headers || {}) } });
+  // Superuser tokens live 300 s and a full run takes longer than that: mint a
+  // fresh one every 4 minutes and once more on any 401.
+  let token = "", mintedAt = 0;
+  const mint = async () => {
+    const auth = await fetch(`${base}${entry}/api/discord/admin-token`, { method: "POST", headers: cookie });
+    const body = await auth.json() as { token?: string; error?: string };
+    if (!auth.ok || !body.token) die(`add-on refused auto-login: ${body.error ?? auth.status}`);
+    token = body.token; mintedAt = Date.now();
+  };
+  await mint();
+  const api = async (path: string, init: RequestInit = {}, retried = false): Promise<any> => {
+    if (Date.now() - mintedAt > 240_000) await mint();
+    const r = await fetch(`${base}${entry}/${path}`, { ...init, headers: { ...cookie, Authorization: token, "Content-Type": "application/json", ...(init.headers || {}) } });
     const json = await r.json().catch(() => ({}));
+    if (r.status === 401 && !retried) { await mint(); return api(path, init, true); }
     if (!r.ok) throw new Error(`${path} -> HTTP ${r.status} ${json.error ?? ""}`);
     return json;
   };
